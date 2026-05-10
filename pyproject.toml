@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "replenishment-agent"
+version = "1.0.0"
+description = "Intelligent agent for inventory replenishment with SAP integration"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Proprietary"}
+authors = [
+    {name = "Athens MBA Student"}
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+addopts = "-v --tb=short"
+markers = [
+    "integration: marks integration tests (slow, end-to-end)",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
