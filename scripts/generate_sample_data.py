@@ -47,6 +47,53 @@ def _rand_choice_weighted(values, weights):
 
 
 # ============================================================
+# Description templates per material type
+# ============================================================
+# Realistic-looking descriptions for mock SAP data.
+DESCRIPTION_TEMPLATES = {
+    "ROH": {  # Raw materials
+        "prefixes": ["Steel", "Aluminum", "Copper", "Brass", "Plastic", "Rubber",
+                     "Stainless", "Carbon", "Polyamide", "PVC", "Polypropylene"],
+        "items":    ["sheet", "rod", "tube", "wire", "bar", "plate", "ring",
+                     "pellet", "powder", "granulate"],
+        "specs":    ["2mm", "5mm", "10mm", "20mm", "Ø8", "Ø12", "Ø25", "1.5kg",
+                     "grade A", "grade B", "premium", "industrial"],
+    },
+    "HALB": {  # Semi-finished
+        "prefixes": ["Machined", "Welded", "Painted", "Heat-treated", "Coated",
+                     "Assembled", "Pre-form", "Cut"],
+        "items":    ["bracket", "shaft", "housing", "frame", "plate", "flange",
+                     "spacer", "fitting", "subassembly", "module"],
+        "specs":    ["v1", "v2", "rev A", "rev B", "type 1", "type 2",
+                     "left", "right", "upper", "lower", "small", "medium", "large"],
+    },
+    "FERT": {  # Finished
+        "prefixes": ["Industrial", "Heavy-duty", "Standard", "Premium", "Compact",
+                     "Modular", "Universal", "Professional", "Smart"],
+        "items":    ["pump", "motor", "valve", "gearbox", "controller", "sensor",
+                     "actuator", "drive", "compressor", "regulator", "filter unit"],
+        "specs":    ["220V", "380V", "12V", "24V", "Class A", "Class B", "IP65",
+                     "IP67", "1HP", "2HP", "5HP", "10kW"],
+    },
+    "VERP": {  # Packaging
+        "prefixes": ["Cardboard", "Wooden", "Plastic", "Foam", "Bubble", "Pallet"],
+        "items":    ["box", "crate", "pallet", "wrap", "label", "tape", "insert"],
+        "specs":    ["small", "medium", "large", "EUR1", "EUR2", "60x40x40",
+                     "120x80x100"],
+    },
+}
+
+
+def _generate_description(material_type: str) -> str:
+    """Build a realistic-looking description like 'Steel rod Ø12 grade A'."""
+    template = DESCRIPTION_TEMPLATES.get(material_type, DESCRIPTION_TEMPLATES["ROH"])
+    prefix = random.choice(template["prefixes"])
+    item = random.choice(template["items"])
+    spec = random.choice(template["specs"])
+    return f"{prefix} {item} {spec}"
+
+
+# ============================================================
 # Materials
 # ============================================================
 def generate_materials() -> pd.DataFrame:
@@ -95,6 +142,7 @@ def generate_materials() -> pd.DataFrame:
 
         rows.append({
             "material_id":           material_id,
+            "description":           _generate_description(mtype),
             "material_type":         mtype,
             "uom":                   random.choice(["KG", "PCS", "L"]),
             "abc_class":             abc,

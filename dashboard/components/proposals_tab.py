@@ -13,7 +13,7 @@ def render(proposals: pd.DataFrame, materials: pd.DataFrame) -> None:
         return
 
     df = proposals.merge(
-        materials[["material_id", "abc_class", "material_type", "lead_time_days"]],
+        materials[["material_id", "description", "abc_class", "material_type", "lead_time_days"]],
         on="material_id", how="left",
     )
 
@@ -24,17 +24,20 @@ def render(proposals: pd.DataFrame, materials: pd.DataFrame) -> None:
     with c2:
         min_qty = st.number_input("Min qty", value=0, step=10)
     with c3:
-        search = st.text_input("Search material ID")
+        search = st.text_input("Search ID or description")
 
     if expedite_only:
         df = df[df["expedite"] == 1]
     df = df[df["proposed_qty"] >= min_qty]
     if search:
-        df = df[df["material_id"].str.contains(search, case=False, na=False)]
+        # Search in both material_id and description
+        mask_id = df["material_id"].str.contains(search, case=False, na=False)
+        mask_desc = df["description"].fillna("").str.contains(search, case=False, na=False)
+        df = df[mask_id | mask_desc]
 
     # ---------- Display table ----------
     display_cols = [
-        "material_id", "abc_class", "proposed_date", "proposed_qty",
+        "material_id", "description", "abc_class", "proposed_date", "proposed_qty",
         "estimated_cost", "supplier_id", "lead_time_days",
         "rule_triggered", "expedite", "confidence",
     ]

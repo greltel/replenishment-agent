@@ -22,11 +22,16 @@ from src.utils.forecasting import forecast
 
 
 @st.cache_data(ttl=300)
-def _material_choices() -> list[str]:
+def _material_choices() -> list[tuple[str, str]]:
+    """Return list of (material_id, description) tuples."""
     repo = Repository()
-    df = pd.read_sql("SELECT material_id FROM materials ORDER BY material_id", repo.engine)
+    df = pd.read_sql(
+        "SELECT material_id, COALESCE(description, '') AS description "
+        "FROM materials ORDER BY material_id",
+        repo.engine,
+    )
     repo.close()
-    return df["material_id"].tolist()
+    return list(zip(df["material_id"], df["description"]))
 
 
 def _compute_mrp_for_material(material_id: str, horizon: int = 60) -> tuple[pd.DataFrame, dict]:
@@ -53,6 +58,7 @@ def _compute_mrp_for_material(material_id: str, horizon: int = 60) -> tuple[pd.D
 
     master = {
         "material_id":   material.material_id,
+        "description":   material.description or "",
         "abc_class":     material.abc_class,
         "material_type": material.material_type,
         "uom":           material.uom,
@@ -90,16 +96,29 @@ def render(proposals: pd.DataFrame, materials: pd.DataFrame) -> None:
         st.warning("No materials in DB. Run ETL first.")
         return
 
+    # Build display labels that include the description
+    def _label(item: tuple[str, str]) -> str:
+        mid, desc = item
+        return f"{mid}  —  {desc}" if desc else mid
+
+    material_ids = [m[0] for m in materials_list]
+
     # Default: pick first expedite material if available
     default_idx = 0
     if not proposals.empty:
         expedite = proposals[proposals["expedite"] == 1]
         if not expedite.empty:
             first_expedite = expedite.iloc[0]["material_id"]
-            if first_expedite in materials_list:
-                default_idx = materials_list.index(first_expedite)
+            if first_expedite in material_ids:
+                default_idx = material_ids.index(first_expedite)
 
-    selected = st.selectbox("Select material", materials_list, index=default_idx)
+    selected_tuple = st.selectbox(
+        "Select material",
+        materials_list,
+        index=default_idx,
+        format_func=_label,
+    )
+    selected = selected_tuple[0] if selected_tuple else None
     if not selected:
         return
 
@@ -115,6 +134,8 @@ def render(proposals: pd.DataFrame, materials: pd.DataFrame) -> None:
 
     # ---------- Master data ----------
     st.subheader(f"Master data — {master['material_id']}")
+    if master.get("description"):
+        st.markdown(f"**{master['description']}**")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("ABC class",     master["abc_class"] or "-")
     c1.metric("Material type", master["material_type"] or "-")

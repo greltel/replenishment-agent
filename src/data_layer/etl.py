@@ -82,6 +82,7 @@ def load_materials(data_dir: Path, repo: Repository) -> int:
     for _, row in df.iterrows():
         objects.append(Material(
             material_id=str(row["material_id"]),
+            description=str(row.get("description", "") or "")[:80],
             material_type=row.get("material_type"),
             uom=row.get("uom"),
             abc_class=row.get("abc_class"),

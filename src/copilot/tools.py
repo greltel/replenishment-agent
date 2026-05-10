@@ -230,19 +230,21 @@ def get_summary(repo: Repository) -> dict:
 
 
 def list_critical_proposals(repo: Repository, limit: int = 10) -> list[dict]:
-    proposals = (repo.session.query(Proposal)
-                  .filter(Proposal.rule_triggered.like("%EXPEDITE%"))
-                  .order_by(Proposal.proposed_date)
-                  .limit(limit)
-                  .all())
+    rows = (repo.session.query(Proposal, Material)
+              .join(Material, Material.material_id == Proposal.material_id)
+              .filter(Proposal.rule_triggered.like("%EXPEDITE%"))
+              .order_by(Proposal.proposed_date)
+              .limit(limit)
+              .all())
 
     return [_serialize_dates({
         "material_id":    p.material_id,
+        "description":    m.description or "",
         "proposed_date":  p.proposed_date,
         "proposed_qty":   p.proposed_qty,
         "rule_triggered": p.rule_triggered,
         "confidence":     p.confidence,
-    }) for p in proposals]
+    }) for p, m in rows]
 
 
 def get_material_details(repo: Repository, material_id: str) -> dict:
@@ -262,9 +264,10 @@ def get_material_details(repo: Repository, material_id: str) -> dict:
 
     return _serialize_dates({
         "material_id":      m.material_id,
+        "description":      m.description or "",
         "material_type":    m.material_type,
-        "uom":              m.uom,
-        "abc_class":        m.abc_class,
+        "uom":               m.uom,
+        "abc_class":         m.abc_class,
         "lot_sizing":       m.lot_sizing,
         "lead_time_days":   m.lead_time_days,
         "safety_stock":     m.safety_stock,
@@ -298,6 +301,7 @@ def explain_proposal(repo: Repository, material_id: str) -> dict:
     if not proposals:
         return {
             "material_id": material_id,
+            "description": m.description or "",
             "explanation": "No proposals exist for this material currently.",
         }
 
@@ -305,11 +309,13 @@ def explain_proposal(repo: Repository, material_id: str) -> dict:
     open_pos = repo.get_open_pos(material_id)
     history = repo.get_consumption_history(material_id, days=90)
 
-    avg_daily = sum(abs(m.quantity) for m in history) / 90 if history else 0
+    # Note: 'mv' (not 'm') to avoid shadowing the outer Material variable
+    avg_daily = sum(abs(mv.quantity) for mv in history) / 90 if history else 0
 
     # Build a structured explanation that the LLM can transform to natural language
     return _serialize_dates({
         "material_id":     material_id,
+        "description":     m.description or "",
         "abc_class":       m.abc_class,
         "current_stock":   current_stock,
         "safety_stock":    m.safety_stock,
@@ -354,6 +360,7 @@ def search_proposals(
 
     return [_serialize_dates({
         "material_id":    p.material_id,
+        "description":    m.description or "",
         "abc_class":      m.abc_class,
         "proposed_date":  p.proposed_date,
         "proposed_qty":   p.proposed_qty,
@@ -374,22 +381,25 @@ def get_top_materials_by_demand(
 
     rows = (repo.session.query(
                 Movement.material_id,
+                Material.description,
                 func.sum(func.abs(Movement.quantity)).label("total_consumed"),
                 func.count(Movement.movement_id).label("n_events"),
             )
+            .join(Material, Material.material_id == Movement.material_id)
             .filter(
                 Movement.movement_type.in_(["261", "201", "281"]),
                 Movement.posting_date >= cutoff,
             )
-            .group_by(Movement.material_id)
+            .group_by(Movement.material_id, Material.description)
             .order_by(func.sum(func.abs(Movement.quantity)).desc())
             .limit(n)
             .all())
 
     return [{
         "material_id":     r[0],
-        "total_consumed":  float(r[1] or 0),
-        "n_events":        r[2],
+        "description":     r[1] or "",
+        "total_consumed":  float(r[2] or 0),
+        "n_events":        r[3],
     } for r in rows]
 
 
