@@ -1,0 +1,27 @@
+# SAP raw exports — ΠΟΤΕ στο git
+data/raw/
+data/anonymized/
+
+# Runtime files
+*.db
+*.db-journal
+logs/
+validation_report*.csv
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Secrets — ΠΟΤΕ στο git
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
