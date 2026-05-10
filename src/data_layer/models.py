@@ -21,6 +21,7 @@ class Material(Base):
     __tablename__ = "materials"
 
     material_id     = Column(String(20), primary_key=True)
+    description     = Column(String(80))      # Material description (from MAKT.MAKTX)
     material_type   = Column(String(10))      # ROH (raw), HALB (semi), FERT (finished)
     uom             = Column(String(5))       # KG, PCS, L, ...
     abc_class       = Column(String(1))       # A / B / C

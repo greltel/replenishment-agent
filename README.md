@@ -108,6 +108,42 @@ AS_OF_DATE=auto      # ή 'YYYY-MM-DD' για συγκεκριμένη ημερ�
 Αυτό κάνει τον agent να treat ως "σήμερα" την τελευταία ημερομηνία στα
 data, αποτρέποντας false dead-stock alerts.
 
+## 📊 Backtest & Validation
+
+Ο agent αξιολογείται μέσω συγκριτικού backtest As-Is vs To-Be πάνω στα
+ιστορικά δεδομένα. Τρία cost scenarios υποστηρίζονται:
+
+| Scenario | Holding rate | Description |
+|---|---|---|
+| `conservative` | ~12% | Stable industry, cheap capital, low margins |
+| `realistic` | ~20% | Typical European manufacturer (default) |
+| `aggressive` | ~28% | Tech / fashion / fast obsolescence |
+
+**Βασικές εντολές:**
+
+```bash
+# Single scenario (default: realistic)
+python scripts/run_validation.py --window-days 90
+
+# Επιλογή σεναρίου
+python scripts/run_validation.py --scenario aggressive
+
+# Όλα τα σενάρια ταυτόχρονα
+python scripts/run_validation.py --all-scenarios
+
+# Sensitivity analysis (±20% σε LT, demand, holding)
+python scripts/run_validation.py --sensitivity
+```
+
+**Cost methodology** (Silver-Pyke-Peterson 1998, Vollmann et al. 2005):
+- Holding cost decomposed: capital + warehouse + obsolescence + insurance + shrinkage
+- Stockout cost decomposed: lost sales (margin foregone) + expedite premium
+- Total Cost of Ownership = holding + stockout (acquisition cost excluded)
+- Per ABC class breakdown
+- Cost imputation όταν λείπει `standard_cost` (από material_type + ABC class)
+
+**Output**: CSV reports + dashboard tab "⚖ As-Is vs To-Be"
+
 ## 💬 AI Copilot (προαιρετικό)
 
 Το dashboard περιλαμβάνει AI Copilot — chatbot που απαντά σε ερωτήσεις

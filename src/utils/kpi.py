@@ -3,35 +3,73 @@ KPI calculator for As-Is and To-Be scenarios.
 
 Used both at runtime (compute current state KPIs) and in backtest
 (compare agent decisions vs actual historical decisions).
+
+Provides three layers of metric depth:
+  1. Service-level KPIs:    cycle service, fill rate, stockout days
+  2. Cost KPIs:             holding (decomposed), stockout, total
+  3. Operational KPIs:      orders, turns, days-of-cover
+
+Cost methodology follows Silver/Pyke/Peterson (1998) and Vollmann et al.
+(2005). Holding cost is decomposed into capital + warehouse + obsolescence
++ insurance + shrinkage. Stockout cost includes lost-sale loss + expedite
+premium.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-from typing import Iterable
+from dataclasses import dataclass, asdict, field
+from typing import Iterable, Optional
 
 import numpy as np
 import pandas as pd
 
+from src.utils.cost_estimator import (
+    HoldingCostComponents, StockoutCostParams, CostScenario,
+    impute_costs_in_df,
+)
 
+
+# ============================================================
+# Report containers
+# ============================================================
 @dataclass
 class KPIReport:
-    """Container for KPI results."""
-    cycle_service_level_pct: float   # % of days with no stockout
-    fill_rate_pct: float             # delivered qty / requested qty
-    holding_cost_eur: float          # total holding cost €
-    stockout_days: int               # total days with stock = 0
-    inventory_turns: float           # COGS / avg inventory value
-    avg_inventory_eur: float         # average inventory value held
-    n_orders: int                    # number of replenishment orders
-    avg_order_size: float            # mean order quantity
+    """Container for KPI results — backward-compatible with v1."""
+    cycle_service_level_pct: float
+    fill_rate_pct:           float
+    holding_cost_eur:        float
+    stockout_days:           int
+    inventory_turns:         float
+    avg_inventory_eur:       float
+    n_orders:                int
+    avg_order_size:          float
+
+    # New v2 fields
+    capital_cost_eur:        float = 0.0
+    warehouse_cost_eur:      float = 0.0
+    obsolescence_cost_eur:   float = 0.0
+    insurance_cost_eur:      float = 0.0
+    stockout_cost_eur:       float = 0.0
+    lost_sales_eur:          float = 0.0
+    expedite_premium_eur:    float = 0.0
+    total_cost_of_ownership: float = 0.0
+    days_of_cover_avg:       float = 0.0
+
+    # Per-class breakdown (optional)
+    by_abc_class:            dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        # Drop nested by_abc_class for the flat report version
+        d.pop("by_abc_class", None)
+        return d
 
     def to_df(self, label: str = "KPI") -> pd.DataFrame:
         return pd.DataFrame([{"scenario": label, **self.to_dict()}])
 
 
+# ============================================================
+# KPI Calculator
+# ============================================================
 class KPICalculator:
     """
     Computes KPIs from time-series stock & demand data.
@@ -40,7 +78,13 @@ class KPICalculator:
       stock_history:  [date, material_id, quantity]
       demand_history: [date, material_id, requested_qty, delivered_qty]
       orders:         [date, material_id, quantity, unit_cost]
-      materials:      [material_id, standard_cost]
+      materials:      [material_id, standard_cost, material_type, abc_class]
+
+    Args:
+        holding_rate: scalar (legacy mode) or HoldingCostComponents
+        stockout_params: StockoutCostParams for cost-of-stockout calculation
+        impute_missing_costs: if True, fill in missing standard_cost values
+            from heuristics (material_type + abc_class)
     """
 
     def __init__(
@@ -49,20 +93,38 @@ class KPICalculator:
         demand_history: pd.DataFrame,
         orders: pd.DataFrame,
         materials: pd.DataFrame,
-        holding_rate: float = 0.20,
+        holding_rate: float | HoldingCostComponents = 0.20,
+        stockout_params: Optional[StockoutCostParams] = None,
+        impute_missing_costs: bool = True,
     ):
         self.stock = stock_history.copy()
         self.demand = demand_history.copy()
         self.orders = orders.copy()
         self.materials = materials.copy()
-        self.holding_rate = holding_rate
+
+        # Holding rate may be scalar or decomposed
+        if isinstance(holding_rate, HoldingCostComponents):
+            self.holding_components = holding_rate
+            self.holding_rate = holding_rate.total_rate
+        else:
+            self.holding_components = None
+            self.holding_rate = float(holding_rate)
+
+        self.stockout_params = stockout_params or StockoutCostParams.realistic()
+
+        # Impute missing costs
+        if impute_missing_costs and not self.materials.empty:
+            self.materials = impute_costs_in_df(self.materials)
+            self._cost_col = "imputed_cost"
+        else:
+            self._cost_col = "standard_cost"
 
         # Normalize dates
         for df in (self.stock, self.demand, self.orders):
             if "date" in df.columns:
                 df["date"] = pd.to_datetime(df["date"])
 
-    # ---------- individual KPIs ----------
+    # ---------- Service-level KPIs ----------
     def cycle_service_level(self) -> float:
         """% of (material × day) combinations where stock > 0."""
         if self.stock.empty:
@@ -70,94 +132,284 @@ class KPICalculator:
         return float((self.stock["quantity"] > 0).mean())
 
     def fill_rate(self) -> float:
-        """Delivered qty / requested qty (across all materials & periods)."""
+        """Delivered / requested across all materials & periods."""
         if self.demand.empty:
             return 1.0
         requested = self.demand["requested_qty"].sum()
-        delivered = self.demand["delivered_qty"].sum() if "delivered_qty" in self.demand.columns else requested
+        delivered = (self.demand["delivered_qty"].sum()
+                     if "delivered_qty" in self.demand.columns else requested)
         return float(delivered / requested) if requested > 0 else 1.0
 
-    def holding_cost(self) -> float:
-        """Σ (avg_inventory × unit_cost × holding_rate)."""
-        if self.stock.empty or self.materials.empty:
-            return 0.0
-
-        avg_per_material = self.stock.groupby("material_id")["quantity"].mean()
-        cost_map = self.materials.set_index("material_id")["standard_cost"]
-        joined = avg_per_material.to_frame("avg_qty").join(cost_map, how="inner")
-        return float((joined["avg_qty"] * joined["standard_cost"] * self.holding_rate).sum())
-
     def stockout_days(self) -> int:
-        """Total (material × day) combinations with quantity == 0."""
+        """Total (material × day) combinations with stock == 0."""
         if self.stock.empty:
             return 0
         return int((self.stock["quantity"] == 0).sum())
 
-    def inventory_turns(self) -> float:
-        """COGS / avg inventory value (annualized)."""
-        if self.stock.empty or self.materials.empty or self.demand.empty:
-            return 0.0
-
-        cost_map = self.materials.set_index("material_id")["standard_cost"]
-
-        # COGS = sum of delivered_qty × unit_cost
-        delivered_col = "delivered_qty" if "delivered_qty" in self.demand.columns else "requested_qty"
-        cogs_df = self.demand.copy()
-        cogs_df["cost"] = cogs_df["material_id"].map(cost_map) * cogs_df[delivered_col]
-        cogs = float(cogs_df["cost"].sum())
-
-        # Avg inventory value
-        avg_per_material = self.stock.groupby("material_id")["quantity"].mean()
-        joined = avg_per_material.to_frame("avg_qty").join(cost_map, how="inner")
-        avg_inv_value = float((joined["avg_qty"] * joined["standard_cost"]).sum())
-
-        # Annualize if needed
-        date_range = (self.stock["date"].max() - self.stock["date"].min()).days
-        if date_range > 0 and date_range < 365:
-            cogs = cogs * (365 / date_range)
-
-        return cogs / avg_inv_value if avg_inv_value > 0 else 0.0
-
+    # ---------- Cost KPIs ----------
     def avg_inventory_value(self) -> float:
         """Mean inventory value held (€)."""
         if self.stock.empty or self.materials.empty:
             return 0.0
         avg_per_material = self.stock.groupby("material_id")["quantity"].mean()
-        cost_map = self.materials.set_index("material_id")["standard_cost"]
+        cost_map = self.materials.set_index("material_id")[self._cost_col]
         joined = avg_per_material.to_frame("avg_qty").join(cost_map, how="inner")
-        return float((joined["avg_qty"] * joined["standard_cost"]).sum())
+        return float((joined["avg_qty"] * joined[self._cost_col]).sum())
 
-    # ---------- summary ----------
+    def holding_cost(self) -> float:
+        """Σ (avg_inventory_value × holding_rate)."""
+        return self.avg_inventory_value() * self.holding_rate
+
+    def holding_cost_decomposed(self) -> dict:
+        """Break holding cost into its components."""
+        avg_value = self.avg_inventory_value()
+        if self.holding_components is None:
+            return {
+                "capital_cost":   avg_value * self.holding_rate * 0.5,
+                "warehouse":      avg_value * self.holding_rate * 0.2,
+                "obsolescence":   avg_value * self.holding_rate * 0.2,
+                "insurance":      avg_value * self.holding_rate * 0.05,
+                "shrinkage":      avg_value * self.holding_rate * 0.05,
+                "total":          avg_value * self.holding_rate,
+            }
+        c = self.holding_components
+        return {
+            "capital_cost":   avg_value * c.capital_cost_rate,
+            "warehouse":      avg_value * c.warehouse_rate,
+            "obsolescence":   avg_value * c.obsolescence_rate,
+            "insurance":      avg_value * c.insurance_rate,
+            "shrinkage":      avg_value * c.shrinkage_rate,
+            "total":          avg_value * c.total_rate,
+        }
+
+    def stockout_cost(self) -> dict:
+        """Cost of stockouts: lost sales + expedite premium."""
+        if self.demand.empty or self.materials.empty:
+            return {"lost_sales": 0.0, "expedite_premium": 0.0, "total": 0.0}
+
+        cost_map = self.materials.set_index("material_id")[self._cost_col]
+        sp = self.stockout_params
+
+        # Shortage = requested - delivered
+        d = self.demand.copy()
+        d["unit_cost"] = d["material_id"].map(cost_map).fillna(0)
+        delivered_col = "delivered_qty" if "delivered_qty" in d.columns else "requested_qty"
+        d["shortage"] = (d["requested_qty"] - d[delivered_col]).clip(lower=0)
+        d["lost_revenue"] = d["shortage"] * d["unit_cost"] * sp.revenue_multiplier
+        lost_sales = float((d["lost_revenue"] * sp.gross_margin_pct).sum())
+
+        # Expedite premium
+        if not self.orders.empty:
+            o = self.orders.copy()
+            o["unit_cost"] = o["material_id"].map(cost_map).fillna(0)
+            o["order_value"] = o["quantity"] * o["unit_cost"]
+            stockout_pressure = (
+                self.stockout_days() / max(len(self.stock), 1)
+            )
+            expedite_share = min(stockout_pressure * 2, 1.0) * sp.expedite_probability
+            expedite_premium = float(
+                o["order_value"].sum() * expedite_share * sp.expedite_premium_pct
+            )
+        else:
+            expedite_premium = 0.0
+
+        return {
+            "lost_sales":         lost_sales,
+            "expedite_premium":   expedite_premium,
+            "total":              lost_sales + expedite_premium,
+        }
+
+    def total_cost_of_ownership(self) -> float:
+        """TCO = holding cost + stockout cost. Excludes acquisition cost."""
+        return self.holding_cost() + self.stockout_cost()["total"]
+
+    # ---------- Operational KPIs ----------
+    def inventory_turns(self) -> float:
+        """COGS / avg inventory value (annualized)."""
+        if self.stock.empty or self.materials.empty or self.demand.empty:
+            return 0.0
+
+        cost_map = self.materials.set_index("material_id")[self._cost_col]
+        delivered_col = "delivered_qty" if "delivered_qty" in self.demand.columns else "requested_qty"
+        cogs_df = self.demand.copy()
+        cogs_df["cost"] = cogs_df["material_id"].map(cost_map).fillna(0) * cogs_df[delivered_col]
+        cogs = float(cogs_df["cost"].sum())
+
+        avg_inv_value = self.avg_inventory_value()
+
+        if not self.stock.empty:
+            date_range = (self.stock["date"].max() - self.stock["date"].min()).days
+            if 0 < date_range < 365:
+                cogs = cogs * (365 / date_range)
+
+        return cogs / avg_inv_value if avg_inv_value > 0 else 0.0
+
+    def avg_days_of_cover(self) -> float:
+        """How many days of demand the average inventory covers."""
+        if self.stock.empty or self.demand.empty:
+            return 0.0
+        avg_per_material = self.stock.groupby("material_id")["quantity"].mean()
+        demand_per_material = self.demand.groupby("material_id")["requested_qty"].sum()
+        date_range = max((self.stock["date"].max() - self.stock["date"].min()).days, 1)
+        daily_demand = demand_per_material / date_range
+
+        joined = avg_per_material.to_frame("stock").join(
+            daily_demand.to_frame("daily_demand"), how="inner"
+        )
+        joined = joined[joined["daily_demand"] > 0]
+        if joined.empty:
+            return 0.0
+        joined["days_cover"] = joined["stock"] / joined["daily_demand"]
+        return float(joined["days_cover"].mean())
+
+    # ---------- Per-ABC breakdown ----------
+    def report_by_abc(self) -> dict[str, dict]:
+        """Compute KPIs separately for each ABC class."""
+        if self.materials.empty or "abc_class" not in self.materials.columns:
+            return {}
+
+        classes = self.materials["abc_class"].dropna().unique()
+        out: dict[str, dict] = {}
+
+        for cls in sorted(classes):
+            mids = set(self.materials[
+                self.materials["abc_class"] == cls
+            ]["material_id"])
+
+            sub_stock = self.stock[self.stock["material_id"].isin(mids)] \
+                if not self.stock.empty else self.stock
+            sub_demand = self.demand[self.demand["material_id"].isin(mids)] \
+                if not self.demand.empty else self.demand
+            sub_orders = self.orders[self.orders["material_id"].isin(mids)] \
+                if not self.orders.empty else self.orders
+            sub_materials = self.materials[self.materials["material_id"].isin(mids)]
+
+            sub_calc = KPICalculator(
+                sub_stock, sub_demand, sub_orders, sub_materials,
+                holding_rate=(self.holding_components if self.holding_components
+                              else self.holding_rate),
+                stockout_params=self.stockout_params,
+                impute_missing_costs=False,
+            )
+            sub_calc._cost_col = self._cost_col
+
+            out[str(cls)] = {
+                "n_materials":           len(mids),
+                "cycle_service_level":   round(sub_calc.cycle_service_level() * 100, 2),
+                "fill_rate":             round(sub_calc.fill_rate() * 100, 2),
+                "holding_cost":          round(sub_calc.holding_cost(), 2),
+                "stockout_cost":         round(sub_calc.stockout_cost()["total"], 2),
+                "n_orders":              len(sub_orders),
+                "stockout_days":         sub_calc.stockout_days(),
+            }
+
+        return out
+
+    # ---------- Aggregate report ----------
     def report(self) -> KPIReport:
+        decomp = self.holding_cost_decomposed()
+        stockout = self.stockout_cost()
         return KPIReport(
             cycle_service_level_pct=round(self.cycle_service_level() * 100, 2),
             fill_rate_pct=round(self.fill_rate() * 100, 2),
-            holding_cost_eur=round(self.holding_cost(), 2),
+            holding_cost_eur=round(decomp["total"], 2),
             stockout_days=self.stockout_days(),
             inventory_turns=round(self.inventory_turns(), 2),
             avg_inventory_eur=round(self.avg_inventory_value(), 2),
             n_orders=len(self.orders),
             avg_order_size=round(float(self.orders["quantity"].mean()), 2)
                 if not self.orders.empty else 0.0,
+            capital_cost_eur=round(decomp["capital_cost"], 2),
+            warehouse_cost_eur=round(decomp["warehouse"], 2),
+            obsolescence_cost_eur=round(decomp["obsolescence"], 2),
+            insurance_cost_eur=round(decomp["insurance"], 2),
+            stockout_cost_eur=round(stockout["total"], 2),
+            lost_sales_eur=round(stockout["lost_sales"], 2),
+            expedite_premium_eur=round(stockout["expedite_premium"], 2),
+            total_cost_of_ownership=round(self.total_cost_of_ownership(), 2),
+            days_of_cover_avg=round(self.avg_days_of_cover(), 2),
+            by_abc_class=self.report_by_abc(),
         )
 
 
-def compare_scenarios(asis: KPIReport, tobe: KPIReport) -> pd.DataFrame:
+# ============================================================
+# Comparison
+# ============================================================
+def compare_scenarios(
+    asis: KPIReport,
+    tobe: KPIReport,
+    significance_threshold_pct: float = 5.0,
+) -> pd.DataFrame:
     """Side-by-side comparison DataFrame."""
     asis_dict = asis.to_dict()
     tobe_dict = tobe.to_dict()
+
+    higher_is_better = {
+        "cycle_service_level_pct", "fill_rate_pct", "inventory_turns",
+        "n_orders",
+    }
+    lower_is_better = {
+        "holding_cost_eur", "stockout_days", "stockout_cost_eur",
+        "lost_sales_eur", "expedite_premium_eur",
+        "capital_cost_eur", "warehouse_cost_eur",
+        "obsolescence_cost_eur", "insurance_cost_eur",
+        "total_cost_of_ownership", "avg_inventory_eur",
+    }
 
     rows = []
     for key in asis_dict:
         a = asis_dict[key]
         t = tobe_dict[key]
+
+        if not isinstance(a, (int, float)):
+            continue
+
         delta_abs = t - a
         delta_pct = (delta_abs / a * 100) if a not in (0, 0.0) else float("nan")
+
+        direction = "neutral"
+        if key in higher_is_better:
+            direction = "↑ better" if delta_abs > 0 else "↓ worse"
+        elif key in lower_is_better:
+            direction = "↓ better" if delta_abs < 0 else "↑ worse"
+
+        is_sig = (not np.isnan(delta_pct)
+                  and abs(delta_pct) >= significance_threshold_pct)
+
         rows.append({
-            "metric": key,
-            "as_is": a,
-            "to_be": t,
-            "delta_abs": round(delta_abs, 2),
-            "delta_pct": round(delta_pct, 2) if not np.isnan(delta_pct) else None,
+            "metric":      key,
+            "as_is":       a,
+            "to_be":       t,
+            "delta_abs":   round(delta_abs, 2),
+            "delta_pct":   round(delta_pct, 2) if not np.isnan(delta_pct) else None,
+            "direction":   direction,
+            "significant": is_sig,
         })
+    return pd.DataFrame(rows)
+
+
+# ============================================================
+# Sensitivity analysis helper
+# ============================================================
+def sensitivity_pivot(
+    results: list[tuple[str, KPIReport]],
+    metrics: Optional[list[str]] = None,
+) -> pd.DataFrame:
+    """Pivot multiple KPIReport results into a comparison table."""
+    if metrics is None:
+        metrics = [
+            "cycle_service_level_pct", "fill_rate_pct",
+            "holding_cost_eur", "stockout_cost_eur",
+            "total_cost_of_ownership", "stockout_days",
+            "inventory_turns", "n_orders",
+        ]
+
+    rows = []
+    for name, report in results:
+        d = report.to_dict()
+        row = {"scenario": name}
+        for m in metrics:
+            row[m] = d.get(m, None)
+        rows.append(row)
+
     return pd.DataFrame(rows)

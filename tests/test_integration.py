@@ -93,7 +93,10 @@ def test_validation_runs(isolated_environment):
     assert result.returncode == 0, (
         f"validation failed:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}"
     )
-    assert "As-Is vs To-Be" in result.stdout
+    # New output format includes scenario header and section headers
+    assert "Scenario:" in result.stdout
+    assert "Service-Level KPIs" in result.stdout
+    assert "Cost KPIs" in result.stdout
 
 
 @pytest.mark.integration

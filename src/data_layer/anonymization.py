@@ -81,6 +81,7 @@ def anonymize_materials(
     raw_dir: Path,
     out_dir: Path,
     enrich_with: Path | None = None,
+    include_descriptions: bool = True,
 ) -> None:
     """Combine MARA + MARC + MARD-derived data into materials.csv.
 
@@ -91,6 +92,10 @@ def anonymize_materials(
             movements.csv and purchase_orders.csv to compute smart defaults
             for missing MRP fields (lead_time, safety_stock, MOQ, lot_sizing,
             ABC class).
+        include_descriptions: If True, copy MAKT descriptions verbatim. If
+            False, drop them entirely. Set to False if descriptions contain
+            sensitive product codes/trademarks that could deanonymize the
+            company. Default: True (descriptions are usually safe).
     """
     mara_path = _find_export(raw_dir, "MARA_export")
     marc_path = _find_export(raw_dir, "MARC_export")
@@ -112,6 +117,12 @@ def anonymize_materials(
         "uom":           mara.get("MEINS", "PCS"),
         "standard_cost": parse_sap_number_series(mara["STPRS"]) if "STPRS" in mara.columns else 0,
     })
+
+    # Material description (from MAKT.MAKTX joined in ABAP)
+    if include_descriptions and "MAKTX" in mara.columns:
+        df["description"] = mara["MAKTX"].fillna("").astype(str).str.strip()
+    else:
+        df["description"] = ""
 
     # Join MARC fields if available
     if not marc.empty and "MATNR" in marc.columns:

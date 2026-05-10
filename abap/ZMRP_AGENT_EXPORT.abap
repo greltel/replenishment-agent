@@ -29,7 +29,7 @@
 *&---------------------------------------------------------------------*
 REPORT zmrp_agent_export.
 
-TABLES: mara, marc, mard, ekko, ekpo, mseg, mkpf.
+TABLES: mara, makt, marc, mard, ekko, ekpo, mseg, mkpf.
 
 TYPES: BEGIN OF ty_mara,
          matnr TYPE mara-matnr,
@@ -40,6 +40,7 @@ TYPES: BEGIN OF ty_mara,
          ntgew TYPE mara-ntgew,
          ersda TYPE mara-ersda,
          laeda TYPE mara-laeda,
+         maktx TYPE makt-maktx,    " Material description (from MAKT)
        END OF ty_mara.
 
 TYPES: BEGIN OF ty_marc,
@@ -125,7 +126,8 @@ SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
   SELECT-OPTIONS: s_werks FOR marc-werks,
                   s_mtart FOR mara-mtart,
                   s_dispo FOR marc-dispo.
-  PARAMETERS: p_months TYPE i DEFAULT 24.
+  PARAMETERS: p_months TYPE i DEFAULT 24,
+              p_lang   TYPE makt-spras DEFAULT 'E'.   " Description language (E=EN, D=DE, EL=GR)
 SELECTION-SCREEN END OF BLOCK b2.
 
 SELECTION-SCREEN BEGIN OF BLOCK b3 WITH FRAME TITLE TEXT-003.
@@ -174,14 +176,53 @@ FORM normalize_path.
 ENDFORM.
 
 FORM extract_mara.
-  WRITE: / 'Extracting MARA...'.
-  SELECT matnr mtart meins matkl brgew ntgew ersda laeda
-    FROM mara
+  WRITE: / 'Extracting MARA + MAKT...'.
+
+  " LEFT JOIN MAKT for descriptions (preferred language)
+  SELECT m~matnr m~mtart m~meins m~matkl m~brgew m~ntgew m~ersda m~laeda
+         t~maktx
+    FROM mara AS m
+    LEFT OUTER JOIN makt AS t
+      ON  t~matnr = m~matnr
+      AND t~spras = p_lang
     INTO TABLE gt_mara
-    WHERE mtart IN s_mtart
-      AND lvorm = ''.
+    WHERE m~mtart IN s_mtart
+      AND m~lvorm = ''.
+
+  " Fallback: for materials with no description in p_lang, try English (E)
+  IF p_lang <> 'E'.
+    DATA: lt_missing TYPE TABLE OF mara-matnr,
+          ls_missing TYPE mara-matnr.
+    LOOP AT gt_mara ASSIGNING FIELD-SYMBOL(<fs_check>).
+      IF <fs_check>-maktx IS INITIAL.
+        ls_missing = <fs_check>-matnr.
+        APPEND ls_missing TO lt_missing.
+      ENDIF.
+    ENDLOOP.
+
+    IF lt_missing IS NOT INITIAL.
+      DATA: lt_makt_en TYPE TABLE OF makt.
+      SELECT * FROM makt
+        INTO TABLE lt_makt_en
+        FOR ALL ENTRIES IN lt_missing
+        WHERE matnr = lt_missing-table_line
+          AND spras = 'E'.
+
+      LOOP AT gt_mara ASSIGNING <fs_check>.
+        IF <fs_check>-maktx IS INITIAL.
+          READ TABLE lt_makt_en
+               WITH KEY matnr = <fs_check>-matnr
+               INTO DATA(ls_makt_en).
+          IF sy-subrc = 0.
+            <fs_check>-maktx = ls_makt_en-maktx.
+          ENDIF.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+  ENDIF.
+
   gv_count = lines( gt_mara ).
-  WRITE: / '  ', gv_count, 'records'.
+  WRITE: / '  ', gv_count, 'records (lang=', p_lang, ')'.
   CONCATENATE p_path 'MARA_export.csv' INTO gv_filename.
   PERFORM write_mara_csv USING gv_filename.
 ENDFORM.
@@ -361,17 +402,34 @@ FORM extract_mb51.
 ENDFORM.
 
 FORM write_mara_csv USING p_file TYPE string.
-  DATA: lt_csv TYPE TABLE OF string.
-  APPEND 'MATNR;MTART;MEINS;MATKL;BRGEW;NTGEW;ERSDA;LAEDA' TO lt_csv.
+  DATA: lt_csv     TYPE TABLE OF string,
+        lv_maktx   TYPE string.
+
+  APPEND 'MATNR;MTART;MEINS;MATKL;BRGEW;NTGEW;ERSDA;LAEDA;MAKTX' TO lt_csv.
 
   LOOP AT gt_mara INTO DATA(ls).
     DATA(lv_brgew) = CONV string( ls-brgew ).
     DATA(lv_ntgew) = CONV string( ls-ntgew ).
+
+    " Sanitize description: replace CSV-breaking chars
+    "   ';' → ',' (otherwise breaks the field separator)
+    "   CR/LF → ' ' (otherwise breaks line structure)
+    "   '"' → "'"  (cleaner than escaping)
+    lv_maktx = ls-maktx.
+    REPLACE ALL OCCURRENCES OF ';'        IN lv_maktx WITH ','.
+    REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>cr_lf
+                                          IN lv_maktx WITH ' '.
+    REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>newline
+                                          IN lv_maktx WITH ' '.
+    REPLACE ALL OCCURRENCES OF '"'        IN lv_maktx WITH ''''.
+    CONDENSE lv_maktx.
+
     CONCATENATE ls-matnr ls-mtart ls-meins ls-matkl
                 lv_brgew lv_ntgew ls-ersda ls-laeda
+                lv_maktx
            INTO gv_csv_line SEPARATED BY ';'.
     APPEND gv_csv_line TO lt_csv.
-    CLEAR: lv_brgew, lv_ntgew.
+    CLEAR: lv_brgew, lv_ntgew, lv_maktx.
   ENDLOOP.
 
   PERFORM write_file USING p_file lt_csv.
