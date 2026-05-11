@@ -1,9 +1,13 @@
 """
 Rules engine — applies registered rules to proposals in priority order.
+
+Supports rule ablation: pass `disabled_rules` to skip specific rules.
+This is used by scripts/run_rule_ablation.py to measure the marginal
+contribution of each rule (leave-one-out methodology).
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Iterable, Optional
 
 import pandas as pd
 
@@ -14,12 +18,32 @@ from src.utils.logger import log
 
 
 class RulesEngine:
-    """Applies business rules to MRP-generated proposals."""
+    """Applies business rules to MRP-generated proposals.
 
-    def __init__(self):
+    Args:
+        disabled_rules: Optional set of rule names to skip. Used for ablation
+            studies. Example: {"R-EXPEDITE"} disables the expedite rule and
+            keeps all others active.
+    """
+
+    def __init__(self, disabled_rules: Optional[Iterable[str]] = None):
         # Sort rules once at init by priority (low value = first)
-        self.rules = sorted(RULES_REGISTRY, key=lambda r: r.priority)
+        all_rules = sorted(RULES_REGISTRY, key=lambda r: r.priority)
+        self.disabled_rules = set(disabled_rules) if disabled_rules else set()
+        # Filter out disabled rules
+        self.rules = [
+            r for r in all_rules
+            if getattr(r, "rule_name", r.__name__) not in self.disabled_rules
+        ]
         self._beliefs = {}
+
+        if self.disabled_rules:
+            active_names = [getattr(r, "rule_name", r.__name__) for r in self.rules]
+            log.info(
+                f"RulesEngine: {len(self.disabled_rules)} disabled "
+                f"({', '.join(sorted(self.disabled_rules))}), "
+                f"{len(self.rules)} active"
+            )
 
     def set_beliefs(self, beliefs) -> None:
         """
@@ -80,12 +104,18 @@ class RulesEngine:
         return proposals
 
     def list_rules(self) -> list[dict]:
-        """Diagnostic: list all registered rules."""
+        """Diagnostic: list all registered rules (including disabled)."""
+        all_rules = sorted(RULES_REGISTRY, key=lambda r: r.priority)
         return [
             {
                 "name": getattr(r, "rule_name", r.__name__),
                 "priority": getattr(r, "priority", 100),
                 "function": r.__name__,
+                "active": getattr(r, "rule_name", r.__name__) not in self.disabled_rules,
             }
-            for r in self.rules
+            for r in all_rules
         ]
+
+    def active_rule_names(self) -> list[str]:
+        """Names of currently-active rules (excludes disabled)."""
+        return [getattr(r, "rule_name", r.__name__) for r in self.rules]

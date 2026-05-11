@@ -144,6 +144,36 @@ python scripts/run_validation.py --sensitivity
 
 **Output**: CSV reports + dashboard tab "⚖ As-Is vs To-Be"
 
+### 🔬 Rule Ablation Study
+
+Για να ποσοτικοποιηθεί η συνεισφορά **κάθε rule** στην απόδοση του agent,
+ένα ξεχωριστό script τρέχει το backtest πολλές φορές, κάθε φορά
+απενεργοποιώντας έναν διαφορετικό κανόνα (**leave-one-out methodology**,
+Hooker 1995 — standard στη ML interpretability literature, βλ. Lipton 2018).
+
+```bash
+# Default (normal stock levels)
+python scripts/run_rule_ablation.py --window-days 60
+
+# Stress test (low initial stock — αναδεικνύει καλύτερα τη συμβολή κάθε rule)
+python scripts/run_rule_ablation.py --window-days 60 --stress-test
+```
+
+**Output**: `ablation_report.csv` με στήλες:
+- `disabled_rule`, `n_proposals`, `Δ_proposals`
+- `service_level_pct`, `Δ_service_pp`
+- `holding_cost_eur`, `Δ_holding`
+- `stockout_cost_eur`, `Δ_stockout_cost`, `Δ_stockout_days`
+- `tco_eur`, `Δ_tco`
+
+Το script παράγει επίσης human-readable interpretation που εντοπίζει:
+- Ποιοι κανόνες έχουν τη μεγαλύτερη επίπτωση στο service level
+- Ποιοι αυξάνουν περισσότερο το TCO όταν αφαιρεθούν
+- Ποιοι είναι "dead weight" (παράγουν ίδια αποτελέσματα με/χωρίς αυτούς)
+
+Αυτή η ανάλυση είναι **κρίσιμη για την υπεράσπιση της ΔΕ** — αποδεικνύει
+ότι κάθε rule έχει μετρήσιμη και διακριτή συμβολή στην απόδοση.
+
 ## 💬 AI Copilot (προαιρετικό)
 
 Το dashboard περιλαμβάνει AI Copilot — chatbot που απαντά σε ερωτήσεις
