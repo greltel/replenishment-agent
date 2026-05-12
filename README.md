@@ -49,7 +49,7 @@ replenishment-agent/
 │   ├── rules/              # Business rules engine
 │   ├── copilot/            # 🆕 AI Copilot (Ollama-based LLM assistant)
 │   └── utils/              # KPIs, forecasting, calendar, logger
-├── dashboard/              # Streamlit dashboard (5 tabs incl. Copilot)
+├── dashboard/              # Streamlit dashboard (6 tabs incl. Forecast & Copilot)
 ├── tests/                  # pytest test suite (100 tests)
 ├── scripts/                # Entry points (CLI)
 ├── abap/                   # SAP ABAP extractor program
@@ -173,6 +173,69 @@ python scripts/run_rule_ablation.py --window-days 60 --stress-test
 
 Αυτή η ανάλυση είναι **κρίσιμη για την υπεράσπιση της ΔΕ** — αποδεικνύει
 ότι κάθε rule έχει μετρήσιμη και διακριτή συμβολή στην απόδοση.
+
+## 📈 Demand Forecast (Dashboard Tab)
+
+Νέο tab στο dashboard που εμφανίζει:
+
+- **Ιστορικό κατανάλωσης** ανά υλικό (90/180/365/730 ημέρες)
+- **Πρόβλεψη** για τις επόμενες 14-90 ημέρες με 3 μεθόδους ταυτόχρονα:
+  - Simple Average (baseline)
+  - Moving Average (30-day)
+  - Exponential Smoothing (α=0.3)
+- **Ακρίβεια** μέσω walk-forward validation (5 folds, rolling-origin)
+- **Metrics**: MAE, RMSE, MAPE, Bias
+- **Auto-recommendation** της καλύτερης μεθόδου ανά υλικό βάσει MAPE
+
+**Methodology reference**: Bergmeir & Benítez (2012), "On the use of
+cross-validation for time series predictor evaluation."
+
+**Γιατί είναι σημαντικό**: Δείχνει στην επιτροπή ότι ο agent δεν χρησιμοποιεί
+μία "μαγική" μέθοδο πρόβλεψης — αξιολογεί δομημένα ποια ταιριάζει στο
+demand pattern του κάθε υλικού.
+
+## 📊 Bootstrap Confidence Intervals
+
+Για **στατιστική σημαντικότητα** των αποτελεσμάτων του backtest. Αντί για ένα
+μόνο σενάριο, τρέχουμε N τυχαία παράθυρα και υπολογίζουμε:
+
+- **Mean savings** ± **95% CI** (percentile method)
+- **Bootstrap p-value** (H0: savings = 0)
+- **Service-level lift CI**
+
+```bash
+# Default: 30 samples × 21-day windows
+python scripts/run_bootstrap.py
+
+# Tighter CIs με περισσότερα samples
+python scripts/run_bootstrap.py --n-samples 100
+
+# Διαφορετικό σενάριο κόστους
+python scripts/run_bootstrap.py --scenario aggressive --n-samples 50
+```
+
+**Output**:
+- Console report με thesis-ready statement
+- `bootstrap_report.csv` (per-sample detail)
+- `bootstrap_report_summary.csv` (aggregate stats)
+
+**Παράδειγμα output**:
+
+```
+Across 30 randomly-sampled backtest windows from the historical period,
+the agent achieved a mean TCO reduction of €64,568 (95% CI: [€45,665, €85,506],
+bootstrap p < 0.0001). This result is statistically significant at α = 0.05.
+```
+
+**Methodology references**:
+- Efron, B. & Tibshirani, R. (1993). *An Introduction to the Bootstrap.* CRC.
+- Bergmeir, C., Hyndman, R.J., Koo, B. (2018). "A note on the validity of
+  cross-validation for evaluating autoregressive time series prediction."
+
+**Γιατί είναι κρίσιμο**: Είναι το **#1 ερώτημα** που θα κάνει η επιτροπή
+στην υπεράσπιση: "πώς ξέρετε ότι δεν είναι τυχαίο;". Bootstrap CI είναι η
+απάντηση. Χωρίς αυτό, ένας ισχυρισμός "31% savings" είναι just a number.
+Με αυτό, γίνεται **defensible scientific claim**.
 
 ## 💬 AI Copilot (προαιρετικό)
 

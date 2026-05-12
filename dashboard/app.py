@@ -22,6 +22,7 @@ from dashboard.components import (
     overview_tab,
     proposals_tab,
     drilldown_tab,
+    forecast_tab,
     validation_tab,
     copilot_tab,
 )
@@ -135,10 +136,11 @@ st.divider()
 
 
 # Tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📊 Overview",
     "📋 Proposals",
     "🔍 Drill-down",
+    "📈 Forecast",
     "⚖ As-Is vs To-Be",
     "💬 AI Copilot",
 ])
@@ -153,9 +155,12 @@ with tab3:
     drilldown_tab.render(proposals_df, materials_df)
 
 with tab4:
-    validation_tab.render(proposals_df, materials_df)
+    forecast_tab.render(proposals_df, materials_df)
 
 with tab5:
+    validation_tab.render(proposals_df, materials_df)
+
+with tab6:
     # Copilot needs a fresh repo (not the cached DataFrames)
     _copilot_repo = Repository()
     try:

@@ -128,3 +128,161 @@ def annual_demand(movements: Sequence) -> float:
         return 0.0
     daily_avg = float(history.mean())
     return daily_avg * 365.0
+
+
+# ============================================================
+# Accuracy metrics
+# ============================================================
+def mean_absolute_error(actual: Sequence[float], predicted: Sequence[float]) -> float:
+    """MAE — average absolute deviation. Same units as the data."""
+    if len(actual) == 0 or len(actual) != len(predicted):
+        return 0.0
+    return float(np.mean(np.abs(np.array(actual) - np.array(predicted))))
+
+
+def root_mean_squared_error(actual: Sequence[float], predicted: Sequence[float]) -> float:
+    """RMSE — penalizes large errors more than MAE."""
+    if len(actual) == 0 or len(actual) != len(predicted):
+        return 0.0
+    return float(np.sqrt(np.mean((np.array(actual) - np.array(predicted)) ** 2)))
+
+
+def mean_absolute_percentage_error(
+    actual: Sequence[float], predicted: Sequence[float]
+) -> float:
+    """MAPE — percentage error. Returns 0 for zero-demand days to avoid div-by-zero."""
+    if len(actual) == 0 or len(actual) != len(predicted):
+        return 0.0
+    a = np.array(actual, dtype=float)
+    p = np.array(predicted, dtype=float)
+    nonzero = a != 0
+    if nonzero.sum() == 0:
+        return 0.0
+    return float(np.mean(np.abs((a[nonzero] - p[nonzero]) / a[nonzero])) * 100)
+
+
+def bias(actual: Sequence[float], predicted: Sequence[float]) -> float:
+    """Mean signed error. Positive = over-forecasting; negative = under-forecasting."""
+    if len(actual) == 0 or len(actual) != len(predicted):
+        return 0.0
+    return float(np.mean(np.array(predicted) - np.array(actual)))
+
+
+# ============================================================
+# Walk-forward validation
+# ============================================================
+def walk_forward_evaluate(
+    history: pd.Series,
+    method: str,
+    train_window: int = 60,
+    test_window: int = 14,
+    n_folds: int = 5,
+    **kwargs,
+) -> dict:
+    """
+    Walk-forward validation: train on past N days, predict next M, measure error.
+    Repeat for n_folds shifted by `test_window`.
+
+    Reference: Bergmeir & Benítez (2012) "On the use of cross-validation for
+    time series predictor evaluation".
+
+    Returns
+    -------
+    dict with MAE, RMSE, MAPE, Bias averaged across folds plus per-fold detail.
+    """
+    if len(history) < train_window + test_window:
+        return {"mae": 0.0, "rmse": 0.0, "mape": 0.0, "bias": 0.0,
+                "n_folds": 0, "error": "Not enough history"}
+
+    method_fn = {
+        "simple_average": simple_average,
+        "moving_average": moving_average,
+        "exponential_smoothing": exponential_smoothing,
+    }.get(method)
+    if method_fn is None:
+        return {"error": f"Unknown method: {method}"}
+
+    fold_results = []
+    n = len(history)
+
+    for fold in range(n_folds):
+        # Slide backwards from the end
+        test_end = n - fold * test_window
+        test_start = test_end - test_window
+        train_end = test_start
+        train_start = max(train_end - train_window, 0)
+
+        if train_start >= train_end or test_start >= test_end:
+            break
+
+        train = history.iloc[train_start:train_end]
+        test = history.iloc[test_start:test_end]
+
+        if len(train) == 0 or len(test) == 0:
+            continue
+
+        predicted = method_fn(train, len(test), **kwargs)
+        actual = test.values.tolist()
+
+        fold_results.append({
+            "fold":   fold,
+            "n_train": len(train),
+            "n_test":  len(test),
+            "mae":     mean_absolute_error(actual, predicted),
+            "rmse":    root_mean_squared_error(actual, predicted),
+            "mape":    mean_absolute_percentage_error(actual, predicted),
+            "bias":    bias(actual, predicted),
+        })
+
+    if not fold_results:
+        return {"mae": 0.0, "rmse": 0.0, "mape": 0.0, "bias": 0.0, "n_folds": 0}
+
+    return {
+        "mae":     float(np.mean([f["mae"] for f in fold_results])),
+        "rmse":    float(np.mean([f["rmse"] for f in fold_results])),
+        "mape":    float(np.mean([f["mape"] for f in fold_results])),
+        "bias":    float(np.mean([f["bias"] for f in fold_results])),
+        "n_folds": len(fold_results),
+        "folds":   fold_results,
+    }
+
+
+def compare_methods(
+    history: pd.Series,
+    methods: list[str] | None = None,
+    train_window: int = 60,
+    test_window: int = 14,
+    n_folds: int = 5,
+) -> pd.DataFrame:
+    """
+    Run walk-forward validation for multiple methods and return a comparison.
+
+    Returns
+    -------
+    DataFrame indexed by method with columns [mae, rmse, mape, bias, n_folds].
+    """
+    methods = methods or ["simple_average", "moving_average", "exponential_smoothing"]
+    rows = []
+    for m in methods:
+        result = walk_forward_evaluate(
+            history, m, train_window, test_window, n_folds,
+        )
+        rows.append({
+            "method":  m,
+            "mae":     round(result.get("mae", 0), 2),
+            "rmse":    round(result.get("rmse", 0), 2),
+            "mape":    round(result.get("mape", 0), 2),
+            "bias":    round(result.get("bias", 0), 2),
+            "n_folds": result.get("n_folds", 0),
+        })
+    return pd.DataFrame(rows)
+
+
+def best_method(comparison: pd.DataFrame, metric: str = "mape") -> str:
+    """Pick the best method by lowest error metric."""
+    if comparison.empty:
+        return "moving_average"
+    valid = comparison[comparison["n_folds"] > 0]
+    if valid.empty:
+        return "moving_average"
+    return valid.loc[valid[metric].idxmin(), "method"]
