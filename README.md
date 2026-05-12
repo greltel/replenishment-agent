@@ -237,6 +237,34 @@ bootstrap p < 0.0001). This result is statistically significant at α = 0.05.
 απάντηση. Χωρίς αυτό, ένας ισχυρισμός "31% savings" είναι just a number.
 Με αυτό, γίνεται **defensible scientific claim**.
 
+## 📖 Τεκμηρίωση
+
+Πλήρης τεχνικός οδηγός υλοποίησης σε PDF:
+
+**`docs/parartima_d_technical_guide.pdf`** (20 σελίδες)
+
+Περιεχόμενα:
+1. Αρχιτεκτονική Συστήματος (three-tier offline architecture)
+2. Επίπεδο Δεδομένων (ABAP, anonymization, smart defaults)
+3. Πράκτορας BDI (Beliefs-Desires-Intentions cycle)
+4. MRP & Lot Sizing (5 αλγόριθμοι incl. Wagner-Whitin)
+5. Επιχειρησιακοί Κανόνες (7 rules με decorator pattern)
+6. Αξιολόγηση Backtest (3 cost scenarios + sensitivity)
+7. **Bootstrap Confidence Intervals**
+8. **Rule Ablation Study**
+9. **Demand Forecast Dashboard**
+10. AI Copilot (Ollama-based)
+11. Πώς να Τρέξετε τον Κώδικα — Βήμα προς Βήμα
+12. **Defense-Ready Σημεία Συζήτησης** (Q&A για την επιτροπή)
+
+Το PDF δημιουργείται με το script:
+```bash
+python scripts/generate_parartima_d.py
+```
+
+Αυτό είναι το βασικό deliverable που συνοδεύει τη ΔΕ και βοηθά τόσο τον
+συγγραφέα όσο και την επιτροπή να κατανοήσουν όλη την υλοποίηση.
+
 ## 💬 AI Copilot (προαιρετικό)
 
 Το dashboard περιλαμβάνει AI Copilot — chatbot που απαντά σε ερωτήσεις

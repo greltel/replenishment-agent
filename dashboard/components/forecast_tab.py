@@ -157,17 +157,22 @@ def render(proposals: pd.DataFrame, materials: pd.DataFrame) -> None:
     fig = go.Figure()
 
     # Historical actual demand
+    # Convert pandas Timestamps to ISO strings to avoid plotly/pandas conflicts
+    # (Plotly's add_vline internally does sum() on Timestamps which fails)
+    history_dates = [d.strftime("%Y-%m-%d") for d in history.index]
     fig.add_trace(go.Scatter(
-        x=history.index, y=history.values,
+        x=history_dates, y=history.values,
         mode="lines", name="Ιστορικό",
         line=dict(color="#1F2937", width=1.5),
     ))
 
     # Future forecasts
     last_date = history.index[-1]
-    future_dates = pd.date_range(
+    future_dates_pd = pd.date_range(
         start=last_date + pd.Timedelta(days=1), periods=horizon, freq="D",
     )
+    future_dates = [d.strftime("%Y-%m-%d") for d in future_dates_pd]
+    last_date_str = last_date.strftime("%Y-%m-%d")
 
     for method in method_choice:
         fig.add_trace(go.Scatter(
@@ -181,10 +186,19 @@ def render(proposals: pd.DataFrame, materials: pd.DataFrame) -> None:
             ),
         ))
 
-    # Vertical line at "now"
-    fig.add_vline(
-        x=last_date, line_dash="dot", line_color="red",
-        annotation_text="τώρα", annotation_position="top right",
+    # Vertical line at "now" — use add_shape instead of add_vline to avoid
+    # a Plotly bug where add_vline + Timestamp sums timestamps internally
+    fig.add_shape(
+        type="line",
+        x0=last_date_str, x1=last_date_str,
+        y0=0, y1=1, yref="paper",
+        line=dict(color="red", width=1, dash="dot"),
+    )
+    fig.add_annotation(
+        x=last_date_str, y=1, yref="paper",
+        text="τώρα", showarrow=False,
+        font=dict(color="red", size=11),
+        xshift=20, yshift=-5,
     )
 
     fig.update_layout(
