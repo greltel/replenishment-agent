@@ -239,31 +239,37 @@ bootstrap p < 0.0001). This result is statistically significant at α = 0.05.
 
 ## 📖 Τεκμηρίωση
 
-Πλήρης τεχνικός οδηγός υλοποίησης σε PDF:
+### Τεχνικός Οδηγός Υλοποίησης
 
 **`docs/parartima_d_technical_guide.pdf`** (20 σελίδες)
 
-Περιεχόμενα:
-1. Αρχιτεκτονική Συστήματος (three-tier offline architecture)
-2. Επίπεδο Δεδομένων (ABAP, anonymization, smart defaults)
-3. Πράκτορας BDI (Beliefs-Desires-Intentions cycle)
-4. MRP & Lot Sizing (5 αλγόριθμοι incl. Wagner-Whitin)
-5. Επιχειρησιακοί Κανόνες (7 rules με decorator pattern)
-6. Αξιολόγηση Backtest (3 cost scenarios + sensitivity)
-7. **Bootstrap Confidence Intervals**
-8. **Rule Ablation Study**
-9. **Demand Forecast Dashboard**
-10. AI Copilot (Ollama-based)
-11. Πώς να Τρέξετε τον Κώδικα — Βήμα προς Βήμα
-12. **Defense-Ready Σημεία Συζήτησης** (Q&A για την επιτροπή)
-
-Το PDF δημιουργείται με το script:
+Πλήρης τεχνικός οδηγός υλοποίησης που εξηγεί όλη την αρχιτεκτονική, τα
+modules, και τα features σε 12 ενότητες. Δημιουργείται με:
 ```bash
 python scripts/generate_parartima_d.py
 ```
 
-Αυτό είναι το βασικό deliverable που συνοδεύει τη ΔΕ και βοηθά τόσο τον
-συγγραφέα όσο και την επιτροπή να κατανοήσουν όλη την υλοποίηση.
+### Έγγραφα Συμμόρφωσης ΔΕ Athens MBA
+
+Όλα τα έγγραφα είναι στο `docs/` σε Markdown format (μπορούν να μετατραπούν
+σε Word/PDF για παράδοση):
+
+| Αρχείο | Σκοπός | Παράρτημα ΔΕ |
+|---|---|---|
+| `AI_DISCLOSURE.md` | Δήλωση χρήσης Generative AI tools | Παράρτημα Ε |
+| `DILOSI_EKPONISIS.md` | Υπεύθυνη δήλωση εκπόνησης (template) | 2η σελίδα ΔΕ |
+| `REPRODUCIBILITY.md` | Πλήρης οδηγός αναπαραγωγής αποτελεσμάτων | Παράρτημα ΣΤ |
+| `LIMITATIONS_AND_FUTURE_WORK.md` | Περιορισμοί + προτάσεις επέκτασης | Κεφ. 5 + 6 |
+| `parartima_d_technical_guide.pdf` | Τεχνικός οδηγός υλοποίησης | Παράρτημα Δ |
+
+### Πλήρη Παραρτήματα Λίστα της ΔΕ
+
+1. **Παράρτημα Α**: ABAP source code (αντιγραφή από `abap/ZMRP_AGENT_EXPORT.abap`)
+2. **Παράρτημα Β**: SAP master data examples (CSV samples)
+3. **Παράρτημα Γ**: Validation results (output CSVs από bootstrap/ablation)
+4. **Παράρτημα Δ**: Τεχνικός Οδηγός Υλοποίησης (το PDF)
+5. **Παράρτημα Ε**: Δήλωση χρήσης AI (`AI_DISCLOSURE.md`)
+6. **Παράρτημα ΣΤ**: Reproducibility Guide (`REPRODUCIBILITY.md`)
 
 ## 💬 AI Copilot (προαιρετικό)
 
