@@ -43,18 +43,20 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import pandas as pd
 
-from src.agent.replenishment import ReplenishmentAgent
 from src.data_layer.repository import Repository
-from src.mrp.engine import MRPEngine
 from src.rules.engine import RulesEngine
 from src.rules.policies import RULES_REGISTRY
+from src.utils.as_of_date import get_effective_today
 from src.utils.cost_estimator import SCENARIOS, get_scenario, CostScenario
-from src.utils.kpi import KPICalculator, KPIReport
+from src.utils.kpi import KPIReport
 from src.utils.logger import log
 
-# Import the existing backtest simulators
+# Reuse the SAME To-Be simulator as the main backtest, so that the ablation
+# baseline is — by construction — identical to the To-Be of run_validation.py
+# (same review cadence, same lead-time handling, same KPI cost basis).
 from scripts.run_validation import (
-    simulate_tobe, simulate_asis, _to_df, run_scenario,
+    simulate_tobe, kpis_from_state,
+    DEFAULT_INITIAL_STOCK_FACTOR, STRESS_INITIAL_STOCK_FACTOR,
 )
 
 
@@ -86,124 +88,24 @@ def _run_with_rule_set(
     disabled_rules: set[str],
     stress_test: bool = False,
 ) -> tuple[KPIReport, int]:
-    """Run To-Be simulation with a specific rule set, return KPIs + proposal count.
+    """Run the To-Be simulation with a specific rule set.
+
+    Returns (KPI report, number of proposals generated).
 
     Args:
-        stress_test: If True, start with low initial stock (50% of safety stock)
-            to force the rules to "work harder" and reveal their contributions.
-            Otherwise use 2× safety stock (well-supplied scenario).
-
-    We need a fresh agent instance because RulesEngine reads the rule set at
-    construction time.
+        stress_test: If True, start with low initial stock (50% of safety
+            stock) to force the rules to "work harder" and reveal their
+            contributions. Otherwise start from the historical stock level
+            (same as the main backtest).
     """
-    # ─── Build a To-Be simulation from scratch, with our custom rules engine ───
-    from scripts.run_validation import _FakePO
-
-    state_stock = []
-    state_demand = []
-    state_orders = []
-
-    materials = repo.get_all_materials()
-    materials_by_id = {m.material_id: m for m in materials}
-    stock_levels = {}
-    pending_orders = {}
-    for m in materials:
-        mid = m.material_id
-        stock_levels[mid] = repo.get_current_stock(mid, as_of=start - timedelta(days=1))
-        if stock_levels[mid] == 0:
-            ss = float(m.safety_stock or 0)
-            # Stress test = start at 50% safety; otherwise 2× safety
-            stock_levels[mid] = ss * 0.5 if stress_test else ss * 2
-        pending_orders[mid] = []
-
-    demand_lookup = {}
-    for m in materials:
-        movements = repo.get_all_movements(m.material_id, start=start, end=end)
-        for mv in movements:
-            if mv.movement_type in ("261", "201", "281"):
-                key = (m.material_id, mv.posting_date)
-                demand_lookup[key] = demand_lookup.get(key, 0.0) + abs(mv.quantity)
-
-    mrp = MRPEngine(horizon_days=60)
-    rules_engine = RulesEngine(disabled_rules=disabled_rules)
-    sim_agent = ReplenishmentAgent(repo, mrp, rules_engine)
-
-    total_proposals_generated = 0
-    current = start
-    review_interval = 7
-    days_since_review = 0
-
-    while current <= end:
-        # Process arrivals
-        for mid, queue in pending_orders.items():
-            still_pending = []
-            for (arrival, qty) in queue:
-                if arrival <= current:
-                    stock_levels[mid] += qty
-                    state_orders.append({
-                        "date": arrival, "material_id": mid,
-                        "quantity": qty,
-                        "unit_cost": materials_by_id[mid].standard_cost or 0,
-                    })
-                else:
-                    still_pending.append((arrival, qty))
-            pending_orders[mid] = still_pending
-
-        # Apply demand
-        for m in materials:
-            mid = m.material_id
-            d = demand_lookup.get((mid, current), 0.0)
-            if d > 0:
-                requested = d
-                delivered = min(requested, stock_levels[mid])
-                stock_levels[mid] = max(stock_levels[mid] - requested, 0)
-                state_demand.append({
-                    "date": current, "material_id": mid,
-                    "requested_qty": requested, "delivered_qty": delivered,
-                })
-
-        # Snapshot
-        for mid, qty in stock_levels.items():
-            state_stock.append({
-                "date": current, "material_id": mid, "quantity": qty,
-            })
-
-        # Periodic agent review with our custom rules engine
-        if days_since_review >= review_interval or current == start:
-            days_since_review = 0
-            sim_agent.perceive(as_of=current)
-            sim_agent.beliefs.current_stock = dict(stock_levels)
-            sim_agent.beliefs.open_orders = {
-                mid: [_FakePO(arr, q) for arr, q in pending_orders.get(mid, [])]
-                for mid in stock_levels
-            }
-            sim_agent.deliberate(as_of=current)
-            total_proposals_generated += len(sim_agent.intentions)
-
-            for intention in sim_agent.intentions:
-                lt = int(materials_by_id[intention.material_id].lead_time_days or 0)
-                arrival = intention.proposed_date + timedelta(days=lt)
-                pending_orders[intention.material_id].append(
-                    (arrival, float(intention.proposed_qty))
-                )
-        else:
-            days_since_review += 1
-
-        current += timedelta(days=1)
-
-    # ─── Build KPI report ───
-    kpi = KPICalculator(
-        stock_history=_to_df(state_stock, ["date", "material_id", "quantity"]),
-        demand_history=_to_df(state_demand,
-                              ["date", "material_id", "requested_qty", "delivered_qty"]),
-        orders=_to_df(state_orders,
-                      ["date", "material_id", "quantity", "unit_cost"]),
-        materials=materials_df,
-        holding_rate=scenario.holding,
-        stockout_params=scenario.stockout,
-    ).report()
-
-    return kpi, total_proposals_generated
+    factor = STRESS_INITIAL_STOCK_FACTOR if stress_test else None
+    state = simulate_tobe(
+        repo, start, end,
+        rules_engine=RulesEngine(disabled_rules=disabled_rules),
+        initial_stock_factor=factor,
+    )
+    kpi = kpis_from_state(state, materials_df, scenario, start, end)
+    return kpi, state.n_proposals
 
 
 # ============================================================
@@ -369,18 +271,33 @@ def interpret_results(df: pd.DataFrame) -> str:
         lines.append(f"   • {row['disabled_rule']:25s} → Δ stockout days: {row['Δ_stockout_days']:+d}")
     lines.append("")
 
-    # Find any "dead weight" rules
+    # Rules whose removal LOWERS cost (buffers that were over-conservative here)
+    cost_savers = ablations[ablations["Δ_tco"] < -100].sort_values("Δ_tco")
+    if not cost_savers.empty:
+        lines.append("🟡 Rules whose removal DECREASES TCO in this window "
+                     "(buffer rules that were conservative for this demand pattern):")
+        for _, row in cost_savers.iterrows():
+            lines.append(f"   • {row['disabled_rule']:25s} → Δ TCO: €{row['Δ_tco']:+,.0f}, "
+                         f"Δ service: {row['Δ_service_pp']:+.2f}pp")
+        lines.append("   (Cost/robustness trade-off: the buffer costs holding but "
+                     "protects against demand or lead-time shocks not present here.)")
+        lines.append("")
+
+    # Find rules with no measurable impact
     dead_weight = ablations[
         (ablations["Δ_service_pp"].abs() < 0.1)
         & (ablations["Δ_tco"].abs() < baseline["tco_eur"] * 0.01)
         & (ablations["Δ_stockout_days"] == 0)
     ]
     if not dead_weight.empty:
-        lines.append("⚠️  Rules with negligible measurable impact in this window:")
+        lines.append("⚪ Rules with no measurable KPI impact in this window:")
         for _, row in dead_weight.iterrows():
             lines.append(f"   • {row['disabled_rule']}")
-        lines.append("   (May still matter in other periods or scenarios — "
-                     "do not remove without further investigation.)")
+        lines.append("   Two legitimate reasons: (a) INFORMATIVE rules annotate a proposal "
+                     "(expedite flag, cost estimate) without changing quantity or date, "
+                     "so KPIs cannot move; (b) SAFETY-NET rules whose condition was not "
+                     "met here (no dead stock beyond the threshold; MOQ already enforced "
+                     "by the lot-sizing step). They still matter operationally.")
         lines.append("")
 
     return "\n".join(lines)
@@ -396,7 +313,7 @@ def main():
     parser.add_argument("--window-days", type=int, default=60,
                         help="Backtest window in days (default 60)")
     parser.add_argument("--end", type=str, default=None,
-                        help="End date YYYY-MM-DD (default: today-1)")
+                        help="End date YYYY-MM-DD (default: the dataset's as-of date)")
     parser.add_argument("--scenario", type=str, default="realistic",
                         choices=list(SCENARIOS.keys()),
                         help="Cost scenario (default: realistic)")
@@ -409,8 +326,8 @@ def main():
                         help="Output filename for the comparison CSV")
     args = parser.parse_args()
 
-    end = date.fromisoformat(args.end) if args.end else date.today() - timedelta(days=1)
-    start = end - timedelta(days=args.window_days)
+    end = date.fromisoformat(args.end) if args.end else get_effective_today()
+    start = end - timedelta(days=args.window_days - 1)
 
     log.info(f"Ablation study: {start} → {end} ({args.window_days} days)")
     log.info(f"Scenario: {args.scenario}")

@@ -151,6 +151,49 @@ class TestAggregateSamples:
         result = aggregate_samples(samples, metric="savings")
         assert result.is_significant is False
 
+    def test_stage2_inference_fields(self):
+        """Bootstrap-of-the-mean CI, t-CI, sign test (thesis §3.6.3)."""
+        rng = np.random.default_rng(0)
+        values = rng.normal(loc=100.0, scale=20.0, size=30)
+        samples = [self._make_sample(float(v)) for v in values]
+        result = aggregate_samples(samples, metric="savings",
+                                   n_bootstrap=2000, seed=42)
+
+        mean = float(values.mean())
+        sd = float(values.std(ddof=1))
+        assert abs(result.point_estimate - mean) < 1e-9
+        assert abs(result.std_dev - sd) < 1e-9
+        assert abs(result.std_error - sd / np.sqrt(30)) < 1e-9
+
+        # CI of the mean is much tighter than the spread of single windows
+        assert result.mean_ci_lower < mean < result.mean_ci_upper
+        assert (result.mean_ci_upper - result.mean_ci_lower) < (result.ci_upper - result.ci_lower)
+        # t-CI ≈ bootstrap CI for a normal sample
+        assert abs(result.t_ci_lower - result.mean_ci_lower) < 6.0
+        assert abs(result.t_ci_upper - result.mean_ci_upper) < 6.0
+        # All three tests agree on significance
+        assert result.p_value < 0.01
+        assert result.t_p_value < 0.001
+        assert result.sign_test_p_value < 0.001
+        assert result.n_positive == 30
+        assert result.n_bootstrap == 2000
+        assert result.is_significant is True
+
+    def test_stage2_is_reproducible_with_seed(self):
+        samples = [self._make_sample(50 + 10 * (i % 5)) for i in range(30)]
+        r1 = aggregate_samples(samples, seed=7)
+        r2 = aggregate_samples(samples, seed=7)
+        r3 = aggregate_samples(samples, seed=8)
+        assert r1.mean_ci_lower == r2.mean_ci_lower
+        assert r1.p_value == r2.p_value
+        assert r1.mean_ci_lower != r3.mean_ci_lower
+
+    def test_sign_test_exact_value(self):
+        """30/30 positive → p = 0.5^30 ≈ 9.3e-10 (thesis Table 4.9)."""
+        samples = [self._make_sample(1.0 + i) for i in range(30)]
+        result = aggregate_samples(samples)
+        assert abs(result.sign_test_p_value - 0.5 ** 30) < 1e-12
+
     def test_failed_samples_excluded(self):
         """Samples with .error are excluded from aggregation."""
         good = [self._make_sample(100) for _ in range(20)]

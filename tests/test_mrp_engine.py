@@ -114,3 +114,71 @@ class TestMRPEngine:
             avg_eoq_order = nonzero["planned_receipt"].mean()
             # Each order should be substantial (more than just one period of demand)
             assert avg_eoq_order >= 10
+
+
+class TestLeadTimeAwareness:
+    """Requirements inside the lead time are consolidated into ONE order
+    landing at as_of + LT (no duplicate orders for the same shortage)."""
+
+    def test_single_order_for_shortage_inside_lead_time(
+        self, sample_material, constant_demand, empty_pos
+    ):
+        # LT = 5 days, SS = 50, demand 10/day, stock 20 → already short today
+        engine = MRPEngine(horizon_days=30)
+        today = date(2026, 3, 2)
+        df = engine.calculate(
+            material=sample_material, current_stock=20,
+            open_orders=empty_pos, demand=constant_demand, as_of=today,
+        )
+        inside = df.iloc[: sample_material.lead_time_days]
+        orders_inside = inside[inside["planned_receipt"] > 0]
+        # exactly one order released today, landing at today + LT
+        assert len(orders_inside) == 1
+        first = orders_inside.iloc[0]
+        assert first["planned_release"] == today
+        assert first["planned_arrival"] == today + timedelta(days=sample_material.lead_time_days)
+        # it covers the shortage projected at the arrival date:
+        # 20 - 6 days × 10 = -40 → need 90 to reach SS=50 (LFL, MOQ 10)
+        assert first["planned_receipt"] == pytest.approx(90.0)
+        # the receipt is booked at the arrival day, not today
+        arrival_row = df[df["period"] == first["planned_arrival"]].iloc[0]
+        assert arrival_row["planned_arrival_qty"] == pytest.approx(90.0)
+        assert arrival_row["projected_on_hand"] >= sample_material.safety_stock - 0.01
+        # the days in between are flagged as unavoidable exposure
+        assert inside["below_safety"].all()
+
+    def test_no_reorder_when_pipeline_covers_shortage(
+        self, sample_material, constant_demand
+    ):
+        """A pending order landing within the lead time must not trigger a
+        second order for the same shortage (rolling-review duplicate bug)."""
+        from src.data_layer.models import PurchaseOrder
+        today = date(2026, 3, 2)
+        pending = [PurchaseOrder(
+            po_number="P1", material_id="TEST001", supplier_id="S",
+            quantity=90.0, expected_date=today + timedelta(days=4), status="OPEN",
+        )]
+        engine = MRPEngine(horizon_days=30)
+        df = engine.calculate(
+            material=sample_material, current_stock=20,
+            open_orders=pending, demand=constant_demand, as_of=today,
+        )
+        inside = df.iloc[: sample_material.lead_time_days]
+        assert inside["planned_receipt"].sum() == 0
+
+    def test_overdue_open_po_counts_as_arriving_today(
+        self, sample_material, constant_demand
+    ):
+        from src.data_layer.models import PurchaseOrder
+        today = date(2026, 3, 2)
+        overdue = [PurchaseOrder(
+            po_number="P0", material_id="TEST001", supplier_id="S",
+            quantity=500.0, expected_date=today - timedelta(days=10), status="OPEN",
+        )]
+        engine = MRPEngine(horizon_days=30)
+        df = engine.calculate(
+            material=sample_material, current_stock=20,
+            open_orders=overdue, demand=constant_demand, as_of=today,
+        )
+        assert df.iloc[0]["scheduled_receipt"] == 500.0
+        assert df["planned_receipt"].sum() == 0

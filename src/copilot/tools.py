@@ -247,14 +247,21 @@ def list_critical_proposals(repo: Repository, limit: int = 10) -> list[dict]:
     }) for p, m in rows]
 
 
+def _as_of() -> date:
+    """The agent's effective "today" (AS_OF_DATE / dataset anchored)."""
+    from src.utils.as_of_date import get_effective_today
+    return get_effective_today()
+
+
 def get_material_details(repo: Repository, material_id: str) -> dict:
     m = repo.get_material(material_id)
     if not m:
         return {"error": f"Material '{material_id}' not found"}
 
-    current_stock = repo.get_current_stock(material_id)
+    as_of = _as_of()
+    current_stock = repo.get_current_stock(material_id, as_of=as_of)
     open_pos = repo.get_open_pos(material_id)
-    history = repo.get_consumption_history(material_id, days=90)
+    history = repo.get_consumption_history(material_id, days=90, as_of=as_of)
     proposals = (repo.session.query(Proposal)
                   .filter(Proposal.material_id == material_id)
                   .order_by(Proposal.proposed_date)
@@ -305,9 +312,10 @@ def explain_proposal(repo: Repository, material_id: str) -> dict:
             "explanation": "No proposals exist for this material currently.",
         }
 
-    current_stock = repo.get_current_stock(material_id)
+    as_of = _as_of()
+    current_stock = repo.get_current_stock(material_id, as_of=as_of)
     open_pos = repo.get_open_pos(material_id)
-    history = repo.get_consumption_history(material_id, days=90)
+    history = repo.get_consumption_history(material_id, days=90, as_of=as_of)
 
     # Note: 'mv' (not 'm') to avoid shadowing the outer Material variable
     avg_daily = sum(abs(mv.quantity) for mv in history) / 90 if history else 0
@@ -375,9 +383,10 @@ def get_top_materials_by_demand(
     days: int = 90,
 ) -> list[dict]:
     from datetime import timedelta
-    from src.utils.as_of_date import get_effective_today
+    from src.data_layer.models import CONSUMPTION_MOVEMENT_TYPES
 
-    cutoff = get_effective_today() - timedelta(days=days)
+    as_of = _as_of()
+    cutoff = as_of - timedelta(days=days)
 
     rows = (repo.session.query(
                 Movement.material_id,
@@ -387,8 +396,9 @@ def get_top_materials_by_demand(
             )
             .join(Material, Material.material_id == Movement.material_id)
             .filter(
-                Movement.movement_type.in_(["261", "201", "281"]),
+                Movement.movement_type.in_(list(CONSUMPTION_MOVEMENT_TYPES)),
                 Movement.posting_date >= cutoff,
+                Movement.posting_date <= as_of,
             )
             .group_by(Movement.material_id, Material.description)
             .order_by(func.sum(func.abs(Movement.quantity)).desc())

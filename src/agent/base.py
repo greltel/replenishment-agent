@@ -24,6 +24,10 @@ class AgentBeliefs:
     consumption_history:  dict[str, list]  = field(default_factory=dict)
     annual_demand:        dict[str, float] = field(default_factory=dict)
     timestamp:            datetime         = field(default_factory=_utcnow)
+    # The date the beliefs describe ("today" from the agent's point of view).
+    # Rules and the MRP engine must reason relative to this date — never the
+    # wall clock — so that backtests and historical datasets stay consistent.
+    as_of:                date | None      = None
 
 
 @dataclass

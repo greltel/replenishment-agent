@@ -203,7 +203,9 @@ class TestEnhancedKPICalculator:
         cost = calc.stockout_cost()
         assert cost["lost_sales"] > 0
 
-    def test_tco_includes_both_components(self, sample_data):
+    def test_tco_includes_all_components(self, sample_data):
+        """TCO = holding + stockout + ordering (Silver-Pyke-Peterson total
+        relevant cost; acquisition cost excluded)."""
         materials, stock, demand, orders = sample_data
         calc = KPICalculator(
             stock_history=stock, demand_history=demand,
@@ -212,7 +214,47 @@ class TestEnhancedKPICalculator:
         tco = calc.total_cost_of_ownership()
         hc = calc.holding_cost()
         sc = calc.stockout_cost()["total"]
-        assert abs(tco - (hc + sc)) < 0.01
+        oc = calc.ordering_cost()
+        assert oc == len(orders) * 50.0
+        assert abs(tco - (hc + sc + oc)) < 0.01
+
+    def test_holding_cost_is_prorated_to_window(self, sample_data):
+        """The annual holding rate must be scaled to the window length so
+        that holding, stockout and ordering costs share the same basis."""
+        materials, stock, demand, orders = sample_data
+        calc = KPICalculator(
+            stock_history=stock, demand_history=demand,
+            orders=orders, materials=materials,
+            holding_rate=0.20,
+        )
+        # 10 daily snapshots → 10-day window (inclusive)
+        assert calc.period_days == 10
+        annual = calc.avg_inventory_value() * 0.20
+        assert abs(calc.holding_cost_annualized() - annual) < 1e-6
+        assert abs(calc.holding_cost() - annual * 10 / 365) < 1e-6
+        # Explicit period overrides inference
+        calc60 = KPICalculator(
+            stock_history=stock, demand_history=demand,
+            orders=orders, materials=materials,
+            holding_rate=0.20, period_days=60,
+        )
+        assert abs(calc60.holding_cost() - annual * 60 / 365) < 1e-6
+        # annualize() is the exact inverse of the pro-rating
+        assert abs(calc60.annualize(calc60.holding_cost()) - annual) < 1e-6
+
+    def test_report_exposes_cost_basis(self, sample_data):
+        materials, stock, demand, orders = sample_data
+        report = KPICalculator(
+            stock_history=stock, demand_history=demand,
+            orders=orders, materials=materials, period_days=30,
+        ).report()
+        assert report.period_days == 30
+        assert report.ordering_cost_eur == len(orders) * 50.0
+        assert abs(report.tco_annualized_eur
+                   - report.total_cost_of_ownership * 365 / 30) < 0.05
+        # Per-class breakdown carries the same basis
+        for cls in report.by_abc_class.values():
+            assert "tco" in cls and "ordering_cost" in cls
 
     def test_per_abc_breakdown(self, sample_data):
         materials, stock, demand, orders = sample_data

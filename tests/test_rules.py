@@ -162,3 +162,18 @@ class TestRulesEngine:
 
         proposals = engine.apply(mrp_df, sample_material, AgentDesires())
         assert proposals == []
+
+
+class TestExpediteScope:
+    def test_only_immediate_order_is_expedited(self, sample_material):
+        """With critical stock, the order released now is urgent; a planned
+        order weeks later (beyond today + lead time) is not."""
+        sample_material.safety_stock = 100
+        sample_material.lead_time_days = 5
+        today = date(2026, 3, 2)
+        beliefs = {"current_stock": {sample_material.material_id: 30}, "as_of": today}
+
+        now = {"qty": 50, "rule_triggered": None, "date": today}
+        later = {"qty": 50, "rule_triggered": None, "date": today + timedelta(days=20)}
+        assert expedite_critical(now, sample_material, beliefs, AgentDesires())["expedite"] is True
+        assert expedite_critical(later, sample_material, beliefs, AgentDesires()).get("expedite", False) is False

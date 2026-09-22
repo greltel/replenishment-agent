@@ -24,11 +24,20 @@ import pandas as pd
 def consumption_to_daily_series(
     movements: Sequence,
     horizon_back_days: int = 365,
+    as_of: date | None = None,
 ) -> pd.Series:
     """
     Convert a list of Movement objects (with .posting_date and .quantity)
     into a daily-indexed Series of consumption quantities (positive numbers).
     Missing days get zero.
+
+    Parameters
+    ----------
+    as_of : optional anchor for the END of the series ("today"). When given,
+        the series always ends on `as_of`, so a material whose last movement
+        was 100 days ago correctly shows 100 trailing days of zero demand
+        (and a 30-day moving average of ~0). When omitted, the series ends on
+        the last movement date (legacy behaviour, used by exploratory views).
     """
     if not movements:
         return pd.Series(dtype=float)
@@ -41,8 +50,8 @@ def consumption_to_daily_series(
     daily = df.groupby("date")["qty"].sum()
     daily.index = pd.to_datetime(daily.index)
 
-    # Reindex to a continuous daily range
-    end = daily.index.max()
+    # Reindex to a continuous daily range ending at the anchor date
+    end = pd.Timestamp(as_of) if as_of is not None else daily.index.max()
     start = end - pd.Timedelta(days=horizon_back_days)
     full_range = pd.date_range(start=start, end=end, freq="D")
     daily = daily.reindex(full_range, fill_value=0.0)
@@ -98,6 +107,7 @@ def forecast(
     movements: Sequence,
     horizon_days: int,
     method: str = "moving_average",
+    as_of: date | None = None,
     **kwargs,
 ) -> list[float]:
     """
@@ -108,8 +118,9 @@ def forecast(
     movements : list of Movement objects (from DB)
     horizon_days : how many days ahead to forecast
     method : 'simple_average' | 'moving_average' | 'exponential_smoothing'
+    as_of : anchor date for the history (see consumption_to_daily_series)
     """
-    history = consumption_to_daily_series(movements)
+    history = consumption_to_daily_series(movements, as_of=as_of)
 
     if method == "simple_average":
         return simple_average(history, horizon_days)
@@ -121,9 +132,9 @@ def forecast(
         raise ValueError(f"Unknown forecasting method: {method}")
 
 
-def annual_demand(movements: Sequence) -> float:
+def annual_demand(movements: Sequence, as_of: date | None = None) -> float:
     """Estimated annual consumption (used by EOQ)."""
-    history = consumption_to_daily_series(movements, horizon_back_days=365)
+    history = consumption_to_daily_series(movements, horizon_back_days=365, as_of=as_of)
     if len(history) == 0:
         return 0.0
     daily_avg = float(history.mean())
@@ -191,7 +202,7 @@ def walk_forward_evaluate(
     dict with MAE, RMSE, MAPE, Bias averaged across folds plus per-fold detail.
     """
     if len(history) < train_window + test_window:
-        return {"mae": 0.0, "rmse": 0.0, "mape": 0.0, "bias": 0.0,
+        return {"mae": 0.0, "rmse": 0.0, "mape": 0.0, "wmape": 0.0, "bias": 0.0,
                 "n_folds": 0, "error": "Not enough history"}
 
     method_fn = {
@@ -231,20 +242,34 @@ def walk_forward_evaluate(
             "mae":     mean_absolute_error(actual, predicted),
             "rmse":    root_mean_squared_error(actual, predicted),
             "mape":    mean_absolute_percentage_error(actual, predicted),
+            "wmape":   weighted_mape(actual, predicted),
             "bias":    bias(actual, predicted),
         })
 
     if not fold_results:
-        return {"mae": 0.0, "rmse": 0.0, "mape": 0.0, "bias": 0.0, "n_folds": 0}
+        return {"mae": 0.0, "rmse": 0.0, "mape": 0.0, "wmape": 0.0, "bias": 0.0, "n_folds": 0}
 
     return {
         "mae":     float(np.mean([f["mae"] for f in fold_results])),
         "rmse":    float(np.mean([f["rmse"] for f in fold_results])),
         "mape":    float(np.mean([f["mape"] for f in fold_results])),
+        "wmape":   float(np.mean([f["wmape"] for f in fold_results])),
         "bias":    float(np.mean([f["bias"] for f in fold_results])),
         "n_folds": len(fold_results),
         "folds":   fold_results,
     }
+
+
+def weighted_mape(actual: Sequence[float], predicted: Sequence[float]) -> float:
+    """WMAPE = Σ|a − p| / Σ|a| × 100 — the recommended accuracy measure for
+    intermittent demand (Syntetos & Boylan 2005), because plain MAPE explodes
+    on near-zero actuals. Returns 0 when there is no actual demand."""
+    if len(actual) == 0 or len(actual) != len(predicted):
+        return 0.0
+    a = np.array(actual, dtype=float)
+    p = np.array(predicted, dtype=float)
+    denom = float(np.abs(a).sum())
+    return float(np.abs(a - p).sum() / denom * 100) if denom > 0 else 0.0
 
 
 def compare_methods(
@@ -253,25 +278,32 @@ def compare_methods(
     train_window: int = 60,
     test_window: int = 14,
     n_folds: int = 5,
+    method_kwargs: dict[str, dict] | None = None,
 ) -> pd.DataFrame:
     """
     Run walk-forward validation for multiple methods and return a comparison.
 
+    method_kwargs: optional per-method keyword arguments, e.g.
+        {"moving_average": {"window": 4}} when `history` is a weekly series.
+
     Returns
     -------
-    DataFrame indexed by method with columns [mae, rmse, mape, bias, n_folds].
+    DataFrame indexed by method with columns
+    [mae, rmse, mape, wmape, bias, n_folds].
     """
     methods = methods or ["simple_average", "moving_average", "exponential_smoothing"]
+    method_kwargs = method_kwargs or {}
     rows = []
     for m in methods:
         result = walk_forward_evaluate(
-            history, m, train_window, test_window, n_folds,
+            history, m, train_window, test_window, n_folds, **method_kwargs.get(m, {}),
         )
         rows.append({
             "method":  m,
             "mae":     round(result.get("mae", 0), 2),
             "rmse":    round(result.get("rmse", 0), 2),
             "mape":    round(result.get("mape", 0), 2),
+            "wmape":   round(result.get("wmape", 0), 2),
             "bias":    round(result.get("bias", 0), 2),
             "n_folds": result.get("n_folds", 0),
         })

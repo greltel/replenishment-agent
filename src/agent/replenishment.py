@@ -17,6 +17,7 @@ from src.data_layer.models import Proposal
 from src.data_layer.repository import Repository
 from src.mrp.engine import MRPEngine
 from src.rules.engine import RulesEngine
+from src.utils.as_of_date import get_effective_today
 from src.utils.forecasting import forecast
 from src.utils.logger import log
 
@@ -49,20 +50,27 @@ class ReplenishmentAgent(BDIAgent):
     def deliberate(self, as_of: Optional[date] = None) -> None:
         self.intentions = []
         self._mrp_results = {}
-        as_of = as_of or date.today()
+        # "Today" must be the same date the beliefs were perceived for.
+        # Resolution: explicit argument → beliefs.as_of → AS_OF_DATE setting.
+        as_of = as_of or self.beliefs.as_of or get_effective_today()
+        if self.beliefs.as_of is None:
+            self.beliefs.as_of = as_of
+            self.rules.set_beliefs(self.beliefs)
 
         materials = self.repo.get_all_materials()
-        log.info(f"Deliberating over {len(materials)} materials...")
+        log.info(f"Deliberating over {len(materials)} materials (as-of {as_of})...")
 
         for material in materials:
             mid = material.material_id
 
-            # 1. Forecast demand
+            # 1. Forecast demand (history anchored at as_of, so a material whose
+            #    consumption stopped months ago forecasts ~0, not its old rate)
             history = self.beliefs.consumption_history.get(mid, [])
             demand = forecast(
                 movements=history,
                 horizon_days=self.mrp.horizon,
                 method=self.forecast_method,
+                as_of=as_of,
             )
 
             # 2. Run MRP

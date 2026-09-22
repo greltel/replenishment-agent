@@ -36,6 +36,20 @@ def rule(name: str, priority: int = 100):
 # Rule implementations
 # ============================================================
 
+def _belief(beliefs, key: str, default=None):
+    """Read a field from beliefs, which may be an AgentBeliefs dataclass or a
+    dict (RulesEngine.set_beliefs converts dataclasses via vars())."""
+    if isinstance(beliefs, dict):
+        return beliefs.get(key, default)
+    return getattr(beliefs, key, default)
+
+
+def _today(beliefs) -> date:
+    """The date the rules reason about: the beliefs' as-of date if known,
+    otherwise the configured AS_OF_DATE / wall clock."""
+    return _belief(beliefs, "as_of") or get_effective_today()
+
+
 @rule("R-DEAD-STOCK", priority=1)
 def suppress_dead_stock(proposal: dict, material, beliefs, desires) -> Optional[dict]:
     """
@@ -43,13 +57,10 @@ def suppress_dead_stock(proposal: dict, material, beliefs, desires) -> Optional[
     These are likely obsolete or phased-out items.
 
     Threshold is configurable via DEAD_STOCK_THRESHOLD_DAYS (default 365).
-    "Today" is configurable via AS_OF_DATE (see src/utils/as_of_date.py).
+    "Today" is the beliefs' as-of date (the simulation date in a backtest),
+    falling back to AS_OF_DATE (see src/utils/as_of_date.py).
     """
-    # beliefs may be either AgentBeliefs dataclass or dict (engine converts via vars())
-    if hasattr(beliefs, "consumption_history"):
-        history = beliefs.consumption_history.get(material.material_id, [])
-    else:
-        history = beliefs.get("consumption_history", {}).get(material.material_id, [])
+    history = _belief(beliefs, "consumption_history", {}).get(material.material_id, [])
     if not history:
         # No history at all — could be a brand-new item; suppress conservatively
         return None
@@ -58,7 +69,7 @@ def suppress_dead_stock(proposal: dict, material, beliefs, desires) -> Optional[
     if last_movement is None:
         return None
 
-    days_since = (get_effective_today() - last_movement).days
+    days_since = (_today(beliefs) - last_movement).days
     if days_since > config.dead_stock_threshold_days:
         return None  # suppress
 
@@ -68,20 +79,28 @@ def suppress_dead_stock(proposal: dict, material, beliefs, desires) -> Optional[
 @rule("R-EXPEDITE", priority=10)
 def expedite_critical(proposal: dict, material, beliefs, desires) -> dict:
     """
-    Mark proposals as urgent if current stock is critically low (< 50% of safety stock).
+    Mark a proposal as urgent when the current stock is critically low
+    (< 50% of safety stock) AND this is the order that resolves the situation,
+    i.e. the one to be released immediately (release date = today / inside the
+    lead time). Later planned orders of the same material are normal — they
+    only exist because the horizon is long, not because of the shortage.
     """
-    if hasattr(beliefs, "current_stock"):
-        current_stock = beliefs.current_stock.get(material.material_id, 0.0)
-    else:
-        current_stock = beliefs.get("current_stock", {}).get(material.material_id, 0.0)
+    current_stock = _belief(beliefs, "current_stock", {}).get(material.material_id, 0.0)
     safety = float(material.safety_stock or 0.0)
+    if not (safety > 0 and current_stock < safety * 0.5):
+        return proposal
 
-    if safety > 0 and current_stock < safety * 0.5:
-        proposal["expedite"] = True
-        proposal["confidence"] = 1.0
-        existing = proposal.get("rule_triggered") or ""
-        proposal["rule_triggered"] = (existing + " | R-EXPEDITE").strip(" |")
+    today = _belief(beliefs, "as_of")
+    release = proposal.get("date")
+    if today is not None and release is not None:
+        lead_time = int(material.lead_time_days or 0)
+        if release > today + timedelta(days=lead_time):
+            return proposal      # a later order: not the urgent one
 
+    proposal["expedite"] = True
+    proposal["confidence"] = 1.0
+    existing = proposal.get("rule_triggered") or ""
+    proposal["rule_triggered"] = (existing + " | R-EXPEDITE").strip(" |")
     return proposal
 
 

@@ -33,24 +33,19 @@
 
 ### 1.3 Python Dependencies
 
-Το αρχείο `requirements.txt` έχει pinned versions των key dependencies:
+Οι εκδόσεις των βιβλιοθηκών ορίζονται στο `requirements.txt` (κάτω όρια).
+Δοκιμασμένος συνδυασμός (Σεπτέμβριος 2026):
 
 ```
-streamlit==1.36.x
-pandas==2.2.x
-numpy==1.26.x
-sqlalchemy==2.0.x
-plotly==5.22.x
-reportlab==4.2.x
-pytest==8.2.x
-pypdf==4.2.x
-ollama==0.3.x
-faker==25.x
-loguru==0.7.x
+Python 3.11.x
+pandas 3.0 · numpy 2.4 · scipy 1.16
+sqlalchemy 2.0 · streamlit 1.64 · plotly 7.1
+pytest 9 · loguru 0.7 · requests 2.32 · reportlab 4
 ```
 
-**Άλλες versions ενδέχεται να δουλεύουν** αλλά τα παραπάνω είναι τα
-δοκιμασμένα.
+Παλαιότερες εκδόσεις (pandas 2.x, streamlit ≥ 1.36, plotly 5.x) λειτουργούν
+επίσης — το dashboard προσαρμόζεται αυτόματα στο API της εγκατεστημένης
+έκδοσης Streamlit.
 
 ---
 
@@ -114,25 +109,32 @@ pytest tests/ -q
 
 ## 3. Αναπαραγωγή Συγκεκριμένων Αποτελεσμάτων
 
-Για να εξασφαλιστεί η reproducibility, όλα τα random elements του κώδικα
-χρησιμοποιούν **fixed seeds**.
+Όλα τα τυχαία στοιχεία χρησιμοποιούν **σταθερά seeds** και η ημερομηνία
+αναφοράς του συνθετικού dataset είναι **σταθερή** (snapshot 21.09.2026), ώστε
+τα αποτελέσματα να είναι ίδια όποια μέρα κι αν τρέξει ο κώδικας. Οι τιμές
+που ακολουθούν είναι τιμές αναφοράς για τα **συνθετικά** δεδομένα (seed 42)
+— με πραγματικά (ανωνυμοποιημένα) δεδομένα SAP οι αριθμοί διαφέρουν.
+
+Συντόμευση: `run_all.bat` (Windows) ή `./run_all.sh` (macOS/Linux) εκτελεί
+όλα τα βήματα 3.1–3.6 με τη σειρά (~6–8 λεπτά).
 
 ### 3.1 Synthetic Data Generation
 
 ```bash
-python scripts/generate_sample_data.py
+python scripts/generate_sample_data.py            # seed 42, snapshot 2026-09-21
+python scripts/generate_sample_data.py --snapshot-date today   # «ζωντανή» ημερομηνία
 ```
 
-**Reproducible parameters**:
-- Random seed: 42 (hardcoded στο `generate_sample_data.py`)
-- 150 materials με συγκεκριμένη κατανομή ABC class
-- 365 ημέρες ιστορικών movements
-- ABC distribution: ~17% A, ~26% B, ~57% C (deterministic από seed)
+**Reproducible parameters**: seed 42 · 150 υλικά · 365 ημέρες ιστορικό ·
+προσομοιωμένος «ανθρώπινος planner» για το As-Is (εβδομαδιαίες
+αναθεωρήσεις, καθυστερήσεις, μεγάλες παρτίδες) · 5 % αδρανή υλικά ·
+~4 % νέα υλικά · ~15 % εποχικά.
 
-**Output**: `data/samples/*.csv` (6 αρχεία)
+**Output**: `data/samples/*.csv` (materials, stock, purchase_orders, movements)
 
-**Verification**: Η πρώτη γραμμή των materials θα είναι πάντα
-`MAT00001,PVC ring 2mm,ROH,KG,C,...`
+**Verification**: `materials.csv` → 150 γραμμές· `movements.csv` → ~25.000
+γραμμές· το snapshot αποθέματος ισούται με άνοιγμα + παραλαβές − αναλώσεις
+(εσωτερικά συνεπές dataset).
 
 ### 3.2 ETL Pipeline
 
@@ -145,7 +147,8 @@ python scripts/run_etl.py
 **Verification**:
 ```sql
 SELECT COUNT(*) FROM materials;  -- 150
-SELECT COUNT(*) FROM movements;  -- ~15,000-20,000
+SELECT COUNT(*) FROM movements;  -- ~25,000
+SELECT MAX(snapshot_date) FROM stock;  -- 2026-09-21 (= ημερομηνία αναφοράς)
 ```
 
 ### 3.3 Agent Run
@@ -154,36 +157,37 @@ SELECT COUNT(*) FROM movements;  -- ~15,000-20,000
 python scripts/run_agent.py
 ```
 
-**Output**:
-- Console: "Total proposals: 586" (deterministic)
-- DB: `proposals` table populated
+**Output** (συνθετικά δεδομένα): «Total proposals: 108 · Materials covered: 50
+· Expedite alerts: 4» και ο πίνακας `proposals` στη βάση.
 
-### 3.4 Backtest Single Scenario
+### 3.4 Backtest
 
 ```bash
-python scripts/run_validation.py --window-days 60 --scenario realistic
+python scripts/run_validation.py                      # 60 ημέρες, realistic
+python scripts/run_validation.py --all-scenarios
+python scripts/run_validation.py --sensitivity
 ```
 
-**Reproducible KPIs** (με synthetic data):
-- Service level: 100.00% (κάλη tied)
-- Holding cost As-Is: €586,722
-- Holding cost To-Be: €403,837
-- Δ holding: −31.17%
+**Τιμές αναφοράς** (συνθετικά δεδομένα, realistic, παράθυρο 60 ημερών, κόστη
+για το παράθυρο): TCO As-Is €180.271 → To-Be €145.108 (−19,5 %)· επίπεδο
+εξυπηρέτησης 98,9 % → 99,7 %· ημέρες έλλειψης 97 → 29· μέση αξία αποθέματος
+−17,7 %· κόστος παραγγελιών +€7.300. Ετήσιο ισοδύναμο εξοικονόμησης ≈ €214 χιλ.
 
-### 3.5 Bootstrap Confidence Intervals
+**Output**: `validation_report.csv`, `validation_report_abc.csv`,
+`validation_report_all_scenarios.csv`, `validation_report_sensitivity.csv`
+
+### 3.5 Τυχαία παράθυρα + Bootstrap
 
 ```bash
 python scripts/run_bootstrap.py --n-samples 30 --seed 42
 ```
 
-**Reproducible output** (με seed=42):
-- Mean savings: +€64,568
-- 95% CI: [+€45,665, +€85,506]
-- p-value: 0.0000
-- Decision: SIGNIFICANT
+**Τιμές αναφοράς** (συνθετικά δεδομένα): μέση εξοικονόμηση €3.073 ανά
+παράθυρο 21 ημερών· 95 % CI του μέσου (bootstrap, B = 2.000) [€2.148, €3.997]·
+t-CI [€2.084, €4.062]· 28/30 παράθυρα θετικά· p < 0,001 (bootstrap, t-test,
+sign test) → στατιστικά σημαντικό.
 
-**Σημαντικό**: Διαφορετικά seeds θα δώσουν διαφορετικά intervals (φυσικά).
-Το seed=42 είναι standard στην έρευνα machine learning.
+**Output**: `bootstrap_report.csv` (ανά παράθυρο), `bootstrap_report_summary.csv`
 
 ### 3.6 Rule Ablation Study
 
@@ -191,17 +195,18 @@ python scripts/run_bootstrap.py --n-samples 30 --seed 42
 python scripts/run_rule_ablation.py --window-days 60 --stress-test
 ```
 
-**Reproducible output**: Σχετικές διαφορές κάθε rule έναντι baseline. Με
-τα ίδια synthetic data, οι αριθμοί θα είναι deterministic.
+**Output**: `ablation_report.csv` — μεταβολή κάθε KPI όταν αφαιρείται ένας
+κανόνας. Με τα ίδια δεδομένα οι αριθμοί είναι ντετερμινιστικοί.
 
-### 3.7 Forecast Dashboard
+### 3.7 Dashboard
 
 ```bash
 streamlit run dashboard/app.py
 ```
 
-Ανοίγει στο `http://localhost:8501`. Το tab "Forecast" χρησιμοποιεί
-walk-forward validation με fixed splits, οπότε αναπαράξιμο.
+Ανοίγει στο `http://localhost:8501`. Το tab «As-Is vs To-Be» διαβάζει τα CSV
+των βημάτων 3.4–3.6· το tab «Πρόβλεψη ζήτησης» χρησιμοποιεί walk-forward
+validation με σταθερά splits, οπότε είναι αναπαράξιμο.
 
 ---
 
@@ -263,38 +268,35 @@ tools** είναι αναπαράξιμες (επιστρέφουν πάντα �
 
 ## 6. Random Seeds — Πλήρης Λίστα
 
-Για πλήρη reproducibility, τα ακόλουθα seeds είναι hardcoded:
-
 | Component | File | Seed | Σκοπός |
 |---|---|---|---|
-| Sample data generator | `scripts/generate_sample_data.py` | `42` | Synthetic data deterministic |
-| Bootstrap analysis | `scripts/run_bootstrap.py` | `42` (CLI default) | Same random windows |
+| Sample data generator | `scripts/generate_sample_data.py` | `42` + σταθερό snapshot 2026-09-21 | Ίδιο dataset κάθε φορά |
+| Bootstrap — τυχαία παράθυρα | `scripts/run_bootstrap.py` | `42` (CLI `--seed`) | Ίδια παράθυρα |
+| Bootstrap — επαναδειγματοληψία μέσου | `src/utils/bootstrap.py` | `42` (ίδιο seed) | Ίδιο CI, B = 2.000 |
 | Anonymization | `src/data_layer/anonymization.py` | MD5-based | Same input → same pseudonym |
 
-Για διαφορετικό seed στο bootstrap:
-
-```bash
-python scripts/run_bootstrap.py --seed 123
-```
+Για διαφορετικό seed: `python scripts/run_bootstrap.py --seed 123`.
 
 ---
 
 ## 7. Διάρκεια Εκτέλεσης (Reference Benchmarks)
 
-Σε Intel i7 με 16GB RAM, χωρίς GPU:
+Σε laptop Intel i7 / 16 GB RAM, χωρίς GPU, 150 υλικά:
 
 | Λειτουργία | Διάρκεια |
 |---|---|
-| Sample data generation | ~5 sec |
+| Sample data generation | ~1 sec |
 | ETL pipeline | ~3 sec |
-| Agent run | ~10 sec |
-| Backtest single scenario | ~30-60 sec |
-| Backtest all scenarios (×3) | ~2-3 min |
-| Sensitivity analysis (×9) | ~5-10 min |
-| Bootstrap (30 samples) | ~10-15 min |
-| Rule ablation (×8 backtests) | ~3-5 min |
-| Test suite | ~17 sec |
+| Agent run | ~2 sec |
+| Backtest single scenario (60 ημ.) | ~10 sec |
+| Backtest all scenarios (×3) | ~30 sec |
+| Sensitivity analysis (×9) | ~1,5 min |
+| Bootstrap (30 × 21 ημ.) | ~1,5 min |
+| Rule ablation (×8 backtests) | ~1 min |
+| Test suite (192 tests) | ~15 sec |
 | Streamlit dashboard load | ~3 sec |
+
+Με 1.500+ υλικά οι χρόνοι κλιμακώνονται περίπου γραμμικά (×10).
 
 ---
 
@@ -305,15 +307,15 @@ python scripts/run_bootstrap.py --seed 123
 ```
 replenishment-agent/
 ├── replenishment.db                    # SQLite database
-├── data/
-│   ├── samples/                        # 6 generated CSVs
-│   └── anonymized/                     # (εάν τρέξατε anonymization)
-├── validation_report.csv               # Single-scenario backtest
-├── validation_report_all_scenarios.csv # Cross-scenario
-├── bootstrap_report.csv                # Per-sample bootstrap data
-├── bootstrap_report_summary.csv        # Aggregate stats
-├── ablation_report.csv                 # Rule ablation results
-└── docs/parartima_d_technical_guide.pdf
+├── data/samples/                       # 4 generated CSVs
+├── validation_report.csv               # Backtest (Πίν. 4.6)
+├── validation_report_abc.csv           # Ανά κλάση ABC (Πίν. 4.8)
+├── validation_report_all_scenarios.csv # Σενάρια κόστους (Πίν. 4.7)
+├── validation_report_sensitivity.csv   # Ευαισθησία (Πίν. 4.11)
+├── bootstrap_report.csv                # Ανά παράθυρο (Πίν. Γ.1, Σχ. 4.2)
+├── bootstrap_report_summary.csv        # Συγκεντρωτικά (Πίν. 4.9)
+├── ablation_report.csv                 # Rule ablation (Πίν. 4.10)
+└── logs/agent_YYYYMMDD.log             # Ημερολόγιο εκτέλεσης
 ```
 
 ---

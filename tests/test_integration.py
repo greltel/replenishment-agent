@@ -29,8 +29,14 @@ def isolated_environment(tmp_path_factory):
     """
     tmp = tmp_path_factory.mktemp("integration")
     env = os.environ.copy()
-    env["REPLENISHMENT_DATA_DIR"] = str(tmp / "data")
-    env["REPLENISHMENT_DB_URL"] = f"sqlite:///{tmp}/test.db"
+    # These are the variable names src/config.py actually reads. (Earlier
+    # versions set REPLENISHMENT_* names that nothing consumed, so the
+    # integration test silently overwrote the developer's real database.)
+    env["DATABASE_URL"] = f"sqlite:///{tmp}/test.db"
+    env["DATA_SAMPLES_DIR"] = str(tmp / "data" / "samples")
+    env["DATA_RAW_DIR"] = str(tmp / "data" / "raw")
+    env["DATA_ANONYMIZED_DIR"] = str(tmp / "data" / "anonymized")
+    env["LOG_DIR"] = str(tmp / "logs")
     return env, tmp
 
 
@@ -73,26 +79,35 @@ def test_full_pipeline(isolated_environment):
     assert "Agent Run Summary" in result.stdout
     assert "Total proposals:" in result.stdout
 
-    # Step 4: verify proposals exist in DB
+    # Step 4: verify proposals exist in the ISOLATED DB (it must exist —
+    # otherwise the scripts wrote somewhere else, e.g. the real project DB)
     from sqlalchemy import create_engine, text
     db_path = tmp / "test.db"
-    if db_path.exists():
-        engine = create_engine(f"sqlite:///{db_path}")
-        with engine.connect() as conn:
-            count = conn.execute(text("SELECT COUNT(*) FROM proposals")).scalar()
-            assert count > 0, "No proposals were persisted to DB"
+    assert db_path.exists(), "Scripts did not use the isolated DATABASE_URL"
+    engine = create_engine(f"sqlite:///{db_path}")
+    with engine.connect() as conn:
+        count = conn.execute(text("SELECT COUNT(*) FROM proposals")).scalar()
+        assert count > 0, "No proposals were persisted to DB"
+        n_expedite = conn.execute(
+            text("SELECT COUNT(*) FROM proposals WHERE expedite = 1")).scalar()
+        # Regression guard: with the as-of date anchored one day before the
+        # stock snapshot, EVERY proposal used to be flagged as expedite.
+        assert n_expedite < count, "All proposals flagged expedite — as-of/stock bug"
 
 
 @pytest.mark.integration
 def test_validation_runs(isolated_environment):
     """The validation/backtest script completes successfully."""
-    env, _ = isolated_environment
+    env, tmp = isolated_environment
 
-    # Pipeline must already have run from the previous test
-    result = run_script("run_validation.py", env, "--window-days", "30")
+    # Pipeline must already have run from the previous test. Write the report
+    # into the temp dir so the developer's real validation_report.csv is kept.
+    result = run_script("run_validation.py", env, "--window-days", "30",
+                        "--out", str(tmp / "validation_report.csv"))
     assert result.returncode == 0, (
         f"validation failed:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}"
     )
+    assert (tmp / "validation_report.csv").exists()
     # New output format includes scenario header and section headers
     assert "Scenario:" in result.stdout
     assert "Service-Level KPIs" in result.stdout
@@ -100,10 +115,18 @@ def test_validation_runs(isolated_environment):
 
 
 @pytest.mark.integration
-def test_dry_run_does_not_persist():
+def test_dry_run_does_not_persist(isolated_environment):
     """--dry-run option should NOT persist proposals."""
-    # Use real DB but with dry-run flag
-    env = os.environ.copy()
-    result = run_script("run_agent.py", env, "--dry-run")
+    env, tmp = isolated_environment
+    from sqlalchemy import create_engine, text
+    engine = create_engine(f"sqlite:///{tmp}/test.db")
+    with engine.connect() as conn:
+        before = conn.execute(text("SELECT COUNT(*) FROM proposals")).scalar()
+
+    result = run_script("run_agent.py", env, "--dry-run", "--horizon", "14")
     assert result.returncode == 0
     assert "[dry-run]" in result.stdout or "dry-run" in result.stdout.lower()
+
+    with engine.connect() as conn:
+        after = conn.execute(text("SELECT COUNT(*) FROM proposals")).scalar()
+    assert before == after, "dry-run must leave the proposals table untouched"

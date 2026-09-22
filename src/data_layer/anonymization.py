@@ -74,6 +74,27 @@ def _find_export(raw_dir: Path, base_name: str) -> Path | None:
 _parse_sap_date = parse_sap_date
 
 
+# SAP lot-sizing procedure (MARC-DISLS, customizing table T439A) → internal
+# policy. Static procedures map to LFL/FOQ/POQ; the "optimum" procedures
+# (least unit cost, part-period balancing, Groff, dynamic lot size) all
+# pursue the same cost trade-off as Wagner-Whitin, so they map to WW.
+SAP_LOT_SIZING_MAP: dict[str, str] = {
+    "EX": "LFL",   # lot-for-lot (exact)
+    "TB": "LFL",   # daily lot size
+    "FX": "FOQ",   # fixed order quantity
+    "HB": "FOQ",   # replenish up to maximum stock level (fixed target)
+    "WB": "POQ",   # weekly lot size
+    "MB": "POQ",   # monthly lot size
+    "PK": "POQ",   # period lot size per planning calendar
+    "WI": "WW",    # least unit cost procedure
+    "BE": "WW",    # part-period balancing
+    "SP": "WW",    # Groff / dynamic lot size creation
+    "GR": "WW",    # Groff reorder procedure
+    "DY": "WW",    # dynamic lot size
+    "EOQ": "EOQ", "LFL": "LFL", "FOQ": "FOQ", "POQ": "POQ", "WW": "WW",
+}
+
+
 # ============================================================
 # Per-table anonymization
 # ============================================================
@@ -146,9 +167,9 @@ def anonymize_materials(
             if col in df.columns:
                 df[col] = parse_sap_number_series(df[col])
 
-        # Map SAP lot-sizing codes to our internal codes
-        lot_map = {"EX": "LFL", "FX": "FOQ", "WB": "EOQ", "PK": "POQ"}
-        df["lot_sizing"] = df["lot_sizing_raw"].map(lot_map).fillna("LFL")
+        # Map SAP lot-sizing procedures (MARC-DISLS) to our internal codes
+        df["lot_sizing"] = (df["lot_sizing_raw"].astype(str).str.strip().str.upper()
+                            .map(SAP_LOT_SIZING_MAP).fillna("LFL"))
         df = df.drop(columns=["lot_sizing_raw"])
 
     # ABC classification (if not present, derive from cost × frequency proxy)
@@ -255,10 +276,11 @@ def anonymize_movements(raw_dir: Path, out_dir: Path) -> None:
 
     Sign convention enforced HERE based on SAP BWART semantics:
         Receipts (positive stock change):
-            101, 102 cancel, 301, 309, 311, 321, 651
+            101, 301, 309, 311, 321, 651, 701 and the reversals of issues
+            (202, 262, 282, 602, 642)
         Issues (negative stock change):
-            201, 202 cancel, 261, 262 cancel, 281, 282 cancel, 302, 310,
-            312, 322, 601, 602 cancel, 641, 642 cancel, 701, 702
+            201, 261, 281, 302, 310, 312, 322, 601, 641, 702 and the
+            reversals of receipts (102, 652)
 
     This sign correction protects against ABAP exports that may not have
     applied SHKZG-based sign logic correctly.
@@ -270,31 +292,37 @@ def anonymize_movements(raw_dir: Path, out_dir: Path) -> None:
 
     df = _read_any(path)
 
-    # Movement types that result in stock INCREASE (receipts)
+    # Movement types that result in stock INCREASE (receipts → positive)
     RECEIPT_TYPES = {
         "101",  # Goods receipt for PO
-        "102",  # Reversal of goods receipt   (cancels a receipt → issue)
         "301",  # Plant-to-plant transfer (receiving plant)
         "309",  # Material-to-material transfer (target)
         "311",  # Storage location transfer (target)
         "321",  # Quality stock to unrestricted
-        "601",  # Goods issue for delivery (NOTE: SAP records this as negative; we flip below)
-        "651",  # Returns from customer (receipt for returning company)
+        "651",  # Returns from customer
         "701",  # Inventory diff (positive count)
+        # Reversals of ISSUES put the stock back → positive
+        "202",  # reversal of 201
+        "262",  # reversal of 261
+        "282",  # reversal of 281
+        "602",  # reversal of 601 (delivery cancelled)
+        "642",  # reversal of 641
     }
-    # Movement types that result in stock DECREASE (issues/consumption)
+    # Movement types that result in stock DECREASE (issues → negative)
     ISSUE_TYPES = {
-        "201", "202",  # GI for cost center (and reversal)
-        "261", "262",  # GI for production order (and reversal)
-        "281", "282",  # GI for network (and reversal)
+        "201",         # GI for cost center
+        "261",         # GI for production order
+        "281",         # GI for network / project
         "302",         # Plant-to-plant transfer (issuing plant)
         "310",         # Material-to-material transfer (source)
         "312",         # Storage location transfer (source)
         "322",         # Unrestricted to quality stock
-        "602",         # Cancellation of GI for delivery
-        "641", "642",  # Stock transfer order
-        "652",         # Cancellation of customer return
+        "601",         # GI for customer delivery (sales) — a stock DECREASE
+        "641",         # Stock transfer order (issuing plant)
         "702",         # Inventory diff (negative count)
+        # Reversals of RECEIPTS take the stock out again → negative
+        "102",         # reversal of 101
+        "652",         # reversal of 651 (customer return cancelled)
     }
 
     # Parse the raw quantity (handles trailing minus, whitespace, etc.)
@@ -307,16 +335,10 @@ def anonymize_movements(raw_dir: Path, out_dir: Path) -> None:
     def _signed_qty(bwart_val: str, qty: float) -> float:
         abs_qty = abs(qty)
         if bwart_val in RECEIPT_TYPES:
-            # Special case: 102 reverses a receipt → becomes negative
-            if bwart_val == "102":
-                return -abs_qty
             return abs_qty
         if bwart_val in ISSUE_TYPES:
-            # Special cases: '202', '262', '282' are reversals of issues → become positive
-            if bwart_val in ("202", "262", "282", "602", "652"):
-                return abs_qty
             return -abs_qty
-        # Unknown movement type — preserve original sign
+        # Unknown movement type — preserve original sign (SHKZG-based export)
         return qty
 
     quantity = pd.Series([

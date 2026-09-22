@@ -33,26 +33,52 @@ def _parse_iso(s: str) -> date | None:
         return None
 
 
+def _coerce_date(value) -> date | None:
+    """SQLite returns DATE columns as 'YYYY-MM-DD' strings via raw SQL."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return _parse_iso(str(value))
+
+
 @lru_cache(maxsize=1)
 def _resolve_auto() -> date:
-    """Look up the latest movement date in the DB once, then cache it."""
+    """Infer "today" from the dataset once, then cache it.
+
+    The effective date is the LATEST of:
+      • the most recent stock snapshot date (MARD extraction date), and
+      • the most recent movement posting date (MB51).
+
+    Using only the movement date is wrong whenever the stock snapshot was
+    taken after the last posted movement (the normal case: the snapshot is
+    taken at extraction time, movements are posted during the day). In that
+    situation `get_current_stock(as_of=<movement date>)` finds no snapshot
+    and reports zero stock for every material — which in turn makes every
+    proposal look critical (R-EXPEDITE fires for all of them).
+    """
     try:
         from sqlalchemy import create_engine, text
         engine = create_engine(config.database_url)
+        candidates: list[date] = []
         with engine.connect() as conn:
-            row = conn.execute(text(
-                "SELECT MAX(posting_date) FROM movements"
-            )).first()
-            if row and row[0]:
-                value = row[0]
-                if isinstance(value, str):
-                    parsed = _parse_iso(value)
-                    if parsed:
-                        log.info(f"as-of date resolved (auto): {parsed}")
-                        return parsed
-                if isinstance(value, date):
-                    log.info(f"as-of date resolved (auto): {value}")
-                    return value
+            for sql in (
+                "SELECT MAX(snapshot_date) FROM stock",
+                "SELECT MAX(posting_date) FROM movements",
+            ):
+                try:
+                    row = conn.execute(text(sql)).first()
+                except Exception:
+                    continue
+                parsed = _coerce_date(row[0]) if row else None
+                if parsed:
+                    candidates.append(parsed)
+        if candidates:
+            resolved = max(candidates)
+            log.info(f"as-of date resolved (auto): {resolved}")
+            return resolved
     except Exception as e:
         log.warning(f"Could not auto-resolve as-of date: {e}")
 

@@ -1,16 +1,18 @@
 # Replenishment Agent
 
 > Intelligent agent for inventory replenishment with SAP integration
-> Athens MBA — Διπλωματική Εργασία
+> Athens MBA — Διπλωματική Εργασία (Γεώργιος Δράκος, επιβλέπων: Σωτήρης Γκαγιαλής)
 
 Πλήρως λειτουργικό prototype ενός ευφυούς πράκτορα που εκτελεί δυναμικό MRP
-και παράγει αυτοματοποιημένες προτάσεις αναπλήρωσης. Βασίζεται σε αρχιτεκτονική
-BDI (Belief-Desire-Intention) και διασυνδέεται με δεδομένα από SAP ERP.
+και παράγει αυτοματοποιημένες προτάσεις αναπλήρωσης (**πότε** και **πόσο** για
+κάθε υλικό). Βασίζεται σε αρχιτεκτονική BDI (Belief-Desire-Intention) και
+διασυνδέεται με δεδομένα από SAP ERP (read-only ABAP extractor).
 
 ## Quick Start (5 λεπτά)
 
 ```bash
 # 1. Clone & enter
+git clone https://github.com/greltel/replenishment-agent.git
 cd replenishment-agent
 
 # 2. Virtual environment
@@ -20,45 +22,51 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Generate sample data (mock SAP exports — ~150 SKUs)
+# 4. Generate sample data (mock SAP exports — 150 SKUs, 12 μήνες ιστορικό)
 python scripts/generate_sample_data.py
 
 # 5. Load data into SQLite
 python scripts/run_etl.py
 
-# 6. Run the agent
+# 6. Run the agent (perceive → deliberate → act)
 python scripts/run_agent.py
 
-# 7. Run backtest validation (As-Is vs To-Be)
+# 7. Evaluation (As-Is vs To-Be, σενάρια, ευαισθησία, bootstrap, ablation)
 python scripts/run_validation.py
+python scripts/run_validation.py --all-scenarios
+python scripts/run_validation.py --sensitivity
+python scripts/run_bootstrap.py
+python scripts/run_rule_ablation.py --stress-test
 
 # 8. Launch dashboard
 streamlit run dashboard/app.py
 # → http://localhost:8501
 ```
 
+Στα Windows μπορείτε απλώς να τρέξετε `run_all.bat` (κάνει τα βήματα 4–7)
+και μετά `start_dashboard.bat`.
+
 ## Δομή Project
 
 ```
 replenishment-agent/
 ├── src/                    # Main package
-│   ├── config.py           # Central configuration
-│   ├── data_layer/         # SQLAlchemy models, ETL, repository
-│   ├── agent/              # BDI agent implementation
-│   ├── mrp/                # MRP engine + lot sizing policies
-│   ├── rules/              # Business rules engine
-│   ├── copilot/            # 🆕 AI Copilot (Ollama-based LLM assistant)
-│   └── utils/              # KPIs, forecasting, calendar, logger
-├── dashboard/              # Streamlit dashboard (6 tabs incl. Forecast & Copilot)
-├── tests/                  # pytest test suite (100 tests)
+│   ├── config.py           # Central configuration (.env)
+│   ├── data_layer/         # SQLAlchemy models, ETL, anonymization, repository
+│   ├── agent/              # BDI agent (beliefs / desires / intentions)
+│   ├── mrp/                # MRP engine + lot sizing (LFL, FOQ, EOQ, POQ, Wagner-Whitin)
+│   ├── rules/              # Business rules engine (7 rules, priority order)
+│   ├── copilot/            # AI Copilot (local LLM via Ollama, read-only tools)
+│   └── utils/              # KPIs, cost model, bootstrap, forecasting, calendar, logger
+├── dashboard/              # Streamlit dashboard (6 tabs)
+├── tests/                  # pytest test suite (190+ tests)
 ├── scripts/                # Entry points (CLI)
-├── abap/                   # SAP ABAP extractor program
+├── abap/                   # SAP ABAP extractor program (ZMRP_AGENT_EXPORT)
 ├── data/
 │   ├── raw/                # SAP exports (git-ignored)
 │   ├── anonymized/         # Anonymized datasets (git-ignored)
-│   └── samples/            # Sample mock data (committed)
-├── docs/                   # Documentation (incl. copilot_setup.md)
-└── notebooks/              # Jupyter notebooks for analysis
+│   └── samples/            # Generated mock data (git-ignored, reproducible με seed 42)
+└── docs/                   # Documentation (Παραρτήματα ΔΕ, οδηγοί)
 ```
 
 ## Πώς να χρησιμοποιήσετε με ΠΡΑΓΜΑΤΙΚΑ SAP δεδομένα
@@ -79,7 +87,9 @@ replenishment-agent/
 4. Συνεχίστε από το βήμα 5 του Quick Start
 
 Το `anonymization.py` αναγνωρίζει αυτόματα και τις δύο μορφές (xlsx & csv,
-με `,` ή `;` separators).
+με `,` ή `;` separators), διορθώνει το πρόσημο των κινήσεων βάσει BWART και
+αντιστοιχίζει τα SAP lot-sizing procedures (MARC-DISLS: EX, FX, WB, MB, PK,
+WI, BE, SP …) στις εσωτερικές πολιτικές LFL/FOQ/POQ/WW.
 
 ### Smart defaults για ελλιπές master data
 
@@ -97,21 +107,28 @@ replenishment-agent/
 | Lot sizing | MARC.DISLS | Από CV: WW/POQ/EOQ/FOQ |
 | ABC | — | Pareto on `cost × annual_demand` |
 
-### As-of date για ιστορικά datasets
+### Ημερομηνία αναφοράς (as-of date)
 
-Όταν τα δεδομένα σας δεν είναι "live", βάλτε στο `.env`:
-
-```
-AS_OF_DATE=auto      # ή 'YYYY-MM-DD' για συγκεκριμένη ημερομηνία
-```
-
-Αυτό κάνει τον agent να treat ως "σήμερα" την τελευταία ημερομηνία στα
-data, αποτρέποντας false dead-stock alerts.
+Ο πράκτορας χρειάζεται μια έννοια «σήμερα» δεμένη με τα δεδομένα. Με την
+προεπιλογή `AS_OF_DATE=auto` (στο `.env`) χρησιμοποιείται η **πιο πρόσφατη**
+από τις ημερομηνίες: τελευταίο stock snapshot (MARD) και τελευταία κίνηση
+(MB51). Εναλλακτικά `AS_OF_DATE=YYYY-MM-DD` για συγκεκριμένη ημερομηνία.
+Όλα τα scripts αξιολόγησης χρησιμοποιούν την ίδια ημερομηνία ως τέλος του
+παραθύρου (override με `--end`).
 
 ## 📊 Backtest & Validation
 
 Ο agent αξιολογείται μέσω συγκριτικού backtest As-Is vs To-Be πάνω στα
-ιστορικά δεδομένα. Τρία cost scenarios υποστηρίζονται:
+ιστορικά δεδομένα:
+
+- **As-Is**: αναπαραγωγή των πραγματικών κινήσεων (κατανάλωση + παραλαβές 101)
+- **To-Be**: ο agent αποφασίζει κάθε 7 ημέρες βλέποντας μόνο κινήσεις ≤ t
+  (χωρίς look-ahead)· οι παραγγελίες του φτάνουν μετά το lead time
+- Και τα δύο σενάρια ξεκινούν από το **ίδιο** αρχικό απόθεμα (ανακατασκευή
+  από το snapshot και τις κινήσεις) και από την **ίδια** pipeline παραγγελιών
+  σε εξέλιξη (παραλαβές μέσα στο lead time από την έναρξη του παραθύρου)
+
+Τρία cost scenarios υποστηρίζονται:
 
 | Scenario | Holding rate | Description |
 |---|---|---|
@@ -122,154 +139,120 @@ data, αποτρέποντας false dead-stock alerts.
 **Βασικές εντολές:**
 
 ```bash
-# Single scenario (default: realistic)
-python scripts/run_validation.py --window-days 90
+# Κύριο backtest (default: 60 ημέρες, realistic) → validation_report.csv + _abc.csv
+python scripts/run_validation.py
+python scripts/run_validation.py --window-days 90 --scenario aggressive
 
-# Επιλογή σεναρίου
-python scripts/run_validation.py --scenario aggressive
-
-# Όλα τα σενάρια ταυτόχρονα
+# Όλα τα σενάρια ταυτόχρονα → validation_report_all_scenarios.csv
 python scripts/run_validation.py --all-scenarios
 
-# Sensitivity analysis (±20% σε LT, demand, holding)
+# Sensitivity analysis (±20% σε LT, ±10% demand, ±20% holding) → _sensitivity.csv
 python scripts/run_validation.py --sensitivity
 ```
+
+### Βάση κόστους (διαβάστε πριν αναφέρετε οποιοδήποτε €)
+
+Όλα τα κόστη εκφράζονται **για τη διάρκεια του παραθύρου** προσομοίωσης:
+
+```
+holding_cost  = μέση αξία αποθέματος × ετήσιο holding rate × (ημέρες / 365)
+stockout_cost = χαμένες πωλήσεις + premium επείγουσας προμήθειας (μέσα στο παράθυρο)
+ordering_cost = πλήθος παραγγελιών × €50
+TCO           = holding + stockout + ordering
+```
+
+Παράλληλα αναφέρεται το **ετήσιο ισοδύναμο** (`*_annualized`, = τιμή
+παραθύρου × 365 / ημέρες). Χρησιμοποιήστε την τιμή παραθύρου όταν
+περιγράφετε το backtest και το ετήσιο ισοδύναμο για το business case — ποτέ
+μην πολλαπλασιάσετε ξανά το ετήσιο ισοδύναμο με 365/ημέρες.
 
 **Cost methodology** (Silver-Pyke-Peterson 1998, Vollmann et al. 2005):
 - Holding cost decomposed: capital + warehouse + obsolescence + insurance + shrinkage
 - Stockout cost decomposed: lost sales (margin foregone) + expedite premium
-- Total Cost of Ownership = holding + stockout (acquisition cost excluded)
-- Per ABC class breakdown
+- Per ABC class breakdown (`validation_report_abc.csv`)
 - Cost imputation όταν λείπει `standard_cost` (από material_type + ABC class)
 
-**Output**: CSV reports + dashboard tab "⚖ As-Is vs To-Be"
+**Output**: CSV reports + dashboard tab «⚖️ As-Is vs To-Be»
 
 ### 🔬 Rule Ablation Study
 
 Για να ποσοτικοποιηθεί η συνεισφορά **κάθε rule** στην απόδοση του agent,
-ένα ξεχωριστό script τρέχει το backtest πολλές φορές, κάθε φορά
-απενεργοποιώντας έναν διαφορετικό κανόνα (**leave-one-out methodology**,
-Hooker 1995 — standard στη ML interpretability literature, βλ. Lipton 2018).
+το backtest τρέχει πολλές φορές, κάθε φορά απενεργοποιώντας έναν
+διαφορετικό κανόνα (**leave-one-out**, Hooker 1995· Lipton 2018). Η
+προσομοίωση είναι η ίδια με του κύριου backtest (`simulate_tobe`), άρα το
+baseline του ablation ταυτίζεται εξ ορισμού με το To-Be.
 
 ```bash
-# Default (normal stock levels)
-python scripts/run_rule_ablation.py --window-days 60
+# Default (ιστορικό αρχικό απόθεμα)
+python scripts/run_rule_ablation.py
 
-# Stress test (low initial stock — αναδεικνύει καλύτερα τη συμβολή κάθε rule)
-python scripts/run_rule_ablation.py --window-days 60 --stress-test
+# Stress test (χαμηλό αρχικό απόθεμα = 50% SS — αναδεικνύει τη συμβολή κάθε rule)
+python scripts/run_rule_ablation.py --stress-test
 ```
 
-**Output**: `ablation_report.csv` με στήλες:
-- `disabled_rule`, `n_proposals`, `Δ_proposals`
-- `service_level_pct`, `Δ_service_pp`
-- `holding_cost_eur`, `Δ_holding`
-- `stockout_cost_eur`, `Δ_stockout_cost`, `Δ_stockout_days`
-- `tco_eur`, `Δ_tco`
-
-Το script παράγει επίσης human-readable interpretation που εντοπίζει:
-- Ποιοι κανόνες έχουν τη μεγαλύτερη επίπτωση στο service level
-- Ποιοι αυξάνουν περισσότερο το TCO όταν αφαιρεθούν
-- Ποιοι είναι "dead weight" (παράγουν ίδια αποτελέσματα με/χωρίς αυτούς)
-
-Αυτή η ανάλυση είναι **κρίσιμη για την υπεράσπιση της ΔΕ** — αποδεικνύει
-ότι κάθε rule έχει μετρήσιμη και διακριτή συμβολή στην απόδοση.
+**Output**: `ablation_report.csv` με στήλες `disabled_rule`, `n_proposals`,
+`Δ_proposals`, `service_level_pct`, `Δ_service_pp`, `holding_cost_eur`,
+`Δ_holding`, `stockout_cost_eur`, `Δ_stockout_cost`, `Δ_stockout_days`,
+`tco_eur`, `Δ_tco`, και ερμηνεία στην κονσόλα. Κανόνες χωρίς μετρήσιμη
+επίδραση στα KPI είναι είτε **ενημερωτικοί** (σήμανση επείγοντος, εκτίμηση
+κόστους — δεν αλλάζουν ποσότητες) είτε **δίχτυα ασφαλείας** που δεν
+ενεργοποιήθηκαν στο συγκεκριμένο παράθυρο.
 
 ## 📈 Demand Forecast (Dashboard Tab)
 
-Νέο tab στο dashboard που εμφανίζει:
-
 - **Ιστορικό κατανάλωσης** ανά υλικό (90/180/365/730 ημέρες)
-- **Πρόβλεψη** για τις επόμενες 14-90 ημέρες με 3 μεθόδους ταυτόχρονα:
-  - Simple Average (baseline)
-  - Moving Average (30-day)
-  - Exponential Smoothing (α=0.3)
+- **Πρόβλεψη** για τις επόμενες 14-90 ημέρες με 3 μεθόδους ταυτόχρονα
+  (simple average, moving average 30d, exponential smoothing α=0.3)
 - **Ακρίβεια** μέσω walk-forward validation (5 folds, rolling-origin)
-- **Metrics**: MAE, RMSE, MAPE, Bias
-- **Auto-recommendation** της καλύτερης μεθόδου ανά υλικό βάσει MAPE
+- **Metrics**: MAE, RMSE, MAPE, Bias · auto-recommendation βάσει MAPE
 
-**Methodology reference**: Bergmeir & Benítez (2012), "On the use of
-cross-validation for time series predictor evaluation."
+**Methodology reference**: Bergmeir & Benítez (2012).
 
-**Γιατί είναι σημαντικό**: Δείχνει στην επιτροπή ότι ο agent δεν χρησιμοποιεί
-μία "μαγική" μέθοδο πρόβλεψης — αξιολογεί δομημένα ποια ταιριάζει στο
-demand pattern του κάθε υλικού.
+## 📊 Τυχαία παράθυρα + Bootstrap Confidence Intervals
 
-## 📊 Bootstrap Confidence Intervals
+Δύο στάδια (ΔΕ §3.6.3):
 
-Για **στατιστική σημαντικότητα** των αποτελεσμάτων του backtest. Αντί για ένα
-μόνο σενάριο, τρέχουμε N τυχαία παράθυρα και υπολογίζουμε:
-
-- **Mean savings** ± **95% CI** (percentile method)
-- **Bootstrap p-value** (H0: savings = 0)
-- **Service-level lift CI**
+1. **N τυχαία παράθυρα** (default 30 × 21 ημέρες, seed 42) → εξοικονόμηση
+   sᵢ = TCO(As-Is) − TCO(To-Be) ανά παράθυρο
+2. **Bootstrap του μέσου** (B = 2.000 επαναδειγματοληψίες) → 95% percentile
+   CI του μέσου + bootstrap p-value· συμπληρωματικά t-CI (df = N−1),
+   μονόπλευρος t-test και ακριβής έλεγχος προσήμου
 
 ```bash
-# Default: 30 samples × 21-day windows
-python scripts/run_bootstrap.py
-
-# Tighter CIs με περισσότερα samples
-python scripts/run_bootstrap.py --n-samples 100
-
-# Διαφορετικό σενάριο κόστους
-python scripts/run_bootstrap.py --scenario aggressive --n-samples 50
+python scripts/run_bootstrap.py                       # 30 × 21 ημέρες
+python scripts/run_bootstrap.py --n-samples 100       # στενότερα CI
+python scripts/run_bootstrap.py --scenario aggressive --window-size 30
 ```
 
 **Output**:
 - Console report με thesis-ready statement
-- `bootstrap_report.csv` (per-sample detail)
-- `bootstrap_report_summary.csv` (aggregate stats)
+- `bootstrap_report.csv` (ανά παράθυρο — Παράρτημα Γ, Πίνακας Γ.1)
+- `bootstrap_report_summary.csv` (συγκεντρωτικά — Πίνακας 4.9)
 
-**Παράδειγμα output**:
+**Methodology references**: Efron & Tibshirani (1993)· Politis & Romano
+(1994)· Bergmeir, Hyndman & Koo (2018).
 
-```
-Across 30 randomly-sampled backtest windows from the historical period,
-the agent achieved a mean TCO reduction of €64,568 (95% CI: [€45,665, €85,506],
-bootstrap p < 0.0001). This result is statistically significant at α = 0.05.
-```
+## Αντιστοίχιση αρχείων → πίνακες ΔΕ
 
-**Methodology references**:
-- Efron, B. & Tibshirani, R. (1993). *An Introduction to the Bootstrap.* CRC.
-- Bergmeir, C., Hyndman, R.J., Koo, B. (2018). "A note on the validity of
-  cross-validation for evaluating autoregressive time series prediction."
-
-**Γιατί είναι κρίσιμο**: Είναι το **#1 ερώτημα** που θα κάνει η επιτροπή
-στην υπεράσπιση: "πώς ξέρετε ότι δεν είναι τυχαίο;". Bootstrap CI είναι η
-απάντηση. Χωρίς αυτό, ένας ισχυρισμός "31% savings" είναι just a number.
-Με αυτό, γίνεται **defensible scientific claim**.
+| Αρχείο | Εντολή | Πίνακας/Σχήμα ΔΕ |
+|---|---|---|
+| `validation_report.csv` | `run_validation.py` | Πίν. 4.6 |
+| `validation_report_abc.csv` | `run_validation.py` | Πίν. 4.8 |
+| `validation_report_all_scenarios.csv` | `run_validation.py --all-scenarios` | Πίν. 4.7 |
+| `validation_report_sensitivity.csv` | `run_validation.py --sensitivity` | Πίν. 4.11 |
+| `bootstrap_report_summary.csv` | `run_bootstrap.py` | Πίν. 4.9 |
+| `bootstrap_report.csv` | `run_bootstrap.py` | Πίν. Γ.1, Σχ. 4.2 |
+| `ablation_report.csv` | `run_rule_ablation.py --stress-test` | Πίν. 4.10 |
 
 ## 📖 Τεκμηρίωση
 
-### Τεχνικός Οδηγός Υλοποίησης
-
-**`docs/parartima_d_technical_guide.pdf`** (20 σελίδες)
-
-Πλήρης τεχνικός οδηγός υλοποίησης που εξηγεί όλη την αρχιτεκτονική, τα
-modules, και τα features σε 12 ενότητες. Δημιουργείται με:
-```bash
-python scripts/generate_parartima_d.py
-```
-
-### Έγγραφα Συμμόρφωσης ΔΕ Athens MBA
-
-Όλα τα έγγραφα είναι στο `docs/` σε Markdown format (μπορούν να μετατραπούν
-σε Word/PDF για παράδοση):
-
-| Αρχείο | Σκοπός | Παράρτημα ΔΕ |
-|---|---|---|
-| `AI_DISCLOSURE.md` | Δήλωση χρήσης Generative AI tools | Παράρτημα Ε |
-| `DILOSI_EKPONISIS.md` | Υπεύθυνη δήλωση εκπόνησης (template) | 2η σελίδα ΔΕ |
-| `REPRODUCIBILITY.md` | Πλήρης οδηγός αναπαραγωγής αποτελεσμάτων | Παράρτημα ΣΤ |
-| `LIMITATIONS_AND_FUTURE_WORK.md` | Περιορισμοί + προτάσεις επέκτασης | Κεφ. 5 + 6 |
-| `parartima_d_technical_guide.pdf` | Τεχνικός οδηγός υλοποίησης | Παράρτημα Δ |
-
-### Πλήρη Παραρτήματα Λίστα της ΔΕ
-
-1. **Παράρτημα Α**: ABAP source code (αντιγραφή από `abap/ZMRP_AGENT_EXPORT.abap`)
-2. **Παράρτημα Β**: SAP master data examples (CSV samples)
-3. **Παράρτημα Γ**: Validation results (output CSVs από bootstrap/ablation)
-4. **Παράρτημα Δ**: Τεχνικός Οδηγός Υλοποίησης (το PDF)
-5. **Παράρτημα Ε**: Δήλωση χρήσης AI (`AI_DISCLOSURE.md`)
-6. **Παράρτημα ΣΤ**: Reproducibility Guide (`REPRODUCIBILITY.md`)
+- **`docs/parartima_d_technical_guide.pdf`** — Τεχνικός Οδηγός Υλοποίησης
+  (Παράρτημα Δ), παράγεται με `python scripts/generate_parartima_d.py`
+- `docs/AI_DISCLOSURE.md` — Δήλωση χρήσης Generative AI (Παράρτημα Ε)
+- `docs/DILOSI_EKPONISIS.md` — Υπεύθυνη δήλωση εκπόνησης (template)
+- `docs/REPRODUCIBILITY.md` — Οδηγός αναπαραγωγής αποτελεσμάτων (Παράρτημα ΣΤ)
+- `docs/LIMITATIONS_AND_FUTURE_WORK.md` — Περιορισμοί + μελλοντική εργασία
+- `docs/copilot_setup.md` — Οδηγίες AI Copilot (Ollama)
 
 ## 💬 AI Copilot (προαιρετικό)
 
@@ -277,27 +260,17 @@ python scripts/generate_parartima_d.py
 στα Ελληνικά ή Αγγλικά για τις προτάσεις του agent. Χρησιμοποιεί **τοπικό
 LLM** μέσω Ollama, οπότε **εταιρικά δεδομένα δεν φεύγουν από το laptop**.
 
-**Setup:**
 ```bash
-# 1. Install Ollama (ollama.com) και pull μοντέλο
-ollama pull llama3.1:8b
-
-# 2. Run dashboard — το copilot tab το ανιχνεύει αυτόματα
-streamlit run dashboard/app.py
+ollama pull llama3.1:8b        # μία φορά (~4,7 GB)
+streamlit run dashboard/app.py # το copilot tab το ανιχνεύει αυτόματα
 ```
 
 Πλήρεις οδηγίες: [`docs/copilot_setup.md`](docs/copilot_setup.md)
 
-**Παραδείγματα ερωτήσεων:**
-- *«Δώσε μου μια σύνοψη»*
-- *«Ποια υλικά είναι κρίσιμα;»*
-- *«Γιατί προτείνεις 500τμχ για το MAT123;»*
-- *«Show me top 5 by demand»*
-
 ## Testing
 
 ```bash
-pytest                              # Όλα τα tests
+pytest                              # Όλα τα tests (τρέχουν σε απομονωμένη βάση)
 pytest --cov=src                    # Με coverage
 pytest tests/test_mrp_engine.py -v  # Συγκεκριμένο file
 ```
@@ -311,14 +284,13 @@ SAP / CSV exports  →  SQLite  →  BDI Agent  →  Dashboard
                                   (MRP + Rules)
 ```
 
-Δείτε `docs/architecture.md` για λεπτομέρειες.
+Λεπτομέρειες στο `docs/parartima_d_technical_guide.pdf`.
 
 ## Tech Stack
 
 - **Python 3.11+** — main language
 - **SQLAlchemy 2.0** — ORM
-- **pandas / numpy** — data manipulation
-- **scipy** — optimization (EOQ, Wagner-Whitin)
+- **pandas / numpy / scipy** — data manipulation, statistics
 - **Streamlit + Plotly** — dashboard
 - **pytest** — testing
 
@@ -328,12 +300,9 @@ SAP / CSV exports  →  SQLite  →  BDI Agent  →  Dashboard
 
 ## AI Disclosure
 
-Generative AI tools (Claude) χρησιμοποιήθηκαν για:
-- Code scaffolding και documentation
-- Σχεδιασμός αρχιτεκτονικής
-
-Όλοι οι αλγόριθμοι, οι επιχειρησιακοί κανόνες και η ανάλυση είναι original και
-έχουν επικυρωθεί από τον συγγραφέα.
+Generative AI tools (Claude) χρησιμοποιήθηκαν για code scaffolding,
+documentation και σχεδιασμό αρχιτεκτονικής. Όλοι οι αλγόριθμοι, οι
+επιχειρησιακοί κανόνες και η ανάλυση έχουν επικυρωθεί από τον συγγραφέα.
 
 ## License
 

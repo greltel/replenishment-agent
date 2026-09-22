@@ -60,18 +60,50 @@ def economic_order_qty(
     return max(eoq, current_need, moq)
 
 
+def poq_period(
+    annual_demand: float,
+    ordering_cost: float,
+    holding_rate: float,
+    unit_cost: float,
+    min_periods: int = 7,
+    max_periods: int = 60,
+) -> int:
+    """Economic order interval for POQ: T* = EOQ / daily demand, clamped.
+
+    Textbook definition (Silver, Pyke & Peterson 1998, §6.5; Vollmann et al.
+    2005): the period order quantity covers the number of periods that the
+    economic order quantity would last. Falls back to `min_periods` (one
+    week) when demand or cost information is missing.
+    """
+    H = holding_rate * unit_cost
+    if annual_demand <= 0 or H <= 0 or ordering_cost <= 0:
+        return min_periods
+    eoq = math.sqrt(2 * annual_demand * ordering_cost / H)
+    daily = annual_demand / 365.0
+    periods = int(round(eoq / daily)) if daily > 0 else min_periods
+    return max(min_periods, min(max_periods, periods))
+
+
 def periodic_order_qty(
     future_demand: Sequence[float],
     n_periods: int = 7,
     moq: float = 0.0,
+    net_req: float = 0.0,
 ) -> float:
-    """Order enough to cover the next n_periods of forecasted demand."""
+    """Order enough to cover the next n_periods of forecasted demand.
+
+    The order never falls below the current net requirement: if the stock
+    deficit today is larger than the next n_periods of demand (e.g. after a
+    demand spike pushed stock far below safety stock), POQ must still restore
+    the safety level. Without this floor the projected on-hand would remain
+    below safety stock after the receipt.
+    """
     if not future_demand:
-        return moq
+        return max(net_req, moq) if net_req > 0 else moq
     coverage = float(sum(future_demand[:n_periods]))
-    if coverage <= 0:
+    if coverage <= 0 and net_req <= 0:
         return 0.0
-    return max(coverage, moq)
+    return max(coverage, net_req, moq)
 
 
 def wagner_whitin(
@@ -120,9 +152,42 @@ def wagner_whitin(
     return orders
 
 
+def wagner_whitin_first_order(
+    net_req: float,
+    future_demand: Sequence[float],
+    ordering_cost: float,
+    holding_rate: float,
+    unit_cost: float,
+    moq: float = 0.0,
+) -> float:
+    """
+    Rolling-horizon Wagner-Whitin: the quantity to order NOW.
+
+    The DP is solved over [net requirement today] + [forecast demand of the
+    following periods]; only the first period's order is released (the rest
+    is re-planned at the next review). This is the standard way of embedding
+    the multi-period optimum in a period-by-period MRP run (Silver, Pyke &
+    Peterson 1998, ch. 6; Vollmann et al. 2005, ch. 14).
+
+    Holding cost per unit per period = annual holding rate × unit cost / 365.
+    """
+    if net_req <= 0:
+        return 0.0
+
+    horizon = [float(net_req)] + [float(d) for d in future_demand[1:]]
+    holding_per_period = max(holding_rate * unit_cost / 365.0, 1e-9)
+    orders = wagner_whitin(horizon, setup_cost=ordering_cost,
+                           holding_cost_per_unit_per_period=holding_per_period)
+    qty = orders[0] if orders else float(net_req)
+    return max(qty, float(net_req), moq)
+
+
 # ============================================================
 # Dispatcher
 # ============================================================
+KNOWN_POLICIES = ("LFL", "FOQ", "EOQ", "POQ", "WW")
+
+
 def apply_lot_sizing(
     net_req: float,
     policy: str,
@@ -133,18 +198,29 @@ def apply_lot_sizing(
     ordering_cost: float = 50.0,
     holding_rate: float = 0.20,
     unit_cost: float = 1.0,
-    poq_periods: int = 7,
+    poq_periods: int | None = None,
 ) -> float:
     """
     Apply the configured lot-sizing policy to a single MRP period.
 
-    Note: for Wagner-Whitin, use the function `wagner_whitin` directly
-    over the entire horizon (it is multi-period optimal).
+    Policies: LFL, FOQ, EOQ, POQ, WW (rolling-horizon Wagner-Whitin).
+    Unknown codes fall back to LFL.
+
+    poq_periods: explicit POQ interval in days. None (default) derives the
+    economic interval from the EOQ (see poq_period), clamped to 7–60 days
+    (the forecast window handed over by the MRP engine).
     """
     if net_req <= 0:
         return 0.0
 
     policy = (policy or "LFL").upper()
+    if poq_periods is None:
+        poq_periods = poq_period(
+            annual_demand=annual_demand_value,
+            ordering_cost=ordering_cost,
+            holding_rate=holding_rate,
+            unit_cost=unit_cost,
+        )
 
     if policy == "LFL":
         return lot_for_lot(net_req, moq)
@@ -166,6 +242,17 @@ def apply_lot_sizing(
         return periodic_order_qty(
             future_demand=future_demand or [],
             n_periods=poq_periods,
+            moq=moq,
+            net_req=net_req,
+        )
+
+    elif policy in ("WW", "W-W", "WAGNER-WHITIN"):
+        return wagner_whitin_first_order(
+            net_req=net_req,
+            future_demand=future_demand or [],
+            ordering_cost=ordering_cost,
+            holding_rate=holding_rate,
+            unit_cost=unit_cost,
             moq=moq,
         )
 

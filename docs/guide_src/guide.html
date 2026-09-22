@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<title>Οδηγός Εκτέλεσης &amp; Παρουσίασης — Ευφυής Πράκτορας Αναπλήρωσης</title>
+<style>
+  @page { size: A4; }
+  :root {
+    --ink: #0b0b0b; --ink2: #3d3c39; --muted: #7a786f; --line: #dedcd5;
+    --accent: #2a78d6; --accent-dark: #1c5cab; --good: #0a7a0a; --warn: #b25e00; --crit: #b3282b;
+    --surface: #f4f3ee; --surface2: #eaf1fb;
+  }
+  * { box-sizing: border-box; }
+  html { font-size: 10.5pt; }
+  body { font-family: "Liberation Sans", Arial, Helvetica, sans-serif; color: var(--ink);
+         line-height: 1.42; margin: 0; }
+  h1 { font-size: 20pt; margin: 0 0 6pt 0; color: var(--ink); page-break-after: avoid; }
+  h2 { font-size: 14.5pt; margin: 18pt 0 6pt 0; color: var(--accent-dark);
+       border-bottom: 1.5pt solid var(--accent); padding-bottom: 3pt; page-break-after: avoid; }
+  h3 { font-size: 11.5pt; margin: 12pt 0 4pt 0; color: var(--ink); page-break-after: avoid; }
+  h4 { font-size: 10.5pt; margin: 9pt 0 3pt 0; color: var(--ink2); page-break-after: avoid; }
+  p { margin: 0 0 6pt 0; text-align: justify; }
+  ul, ol { margin: 0 0 6pt 0; padding-left: 18pt; }
+  li { margin-bottom: 2.5pt; }
+  li p { margin: 0; }
+  code, .cmd { font-family: "Liberation Mono", "DejaVu Sans Mono", Consolas, monospace; font-size: 9pt; }
+  code { background: var(--surface); padding: 0 3pt; border-radius: 3px; }
+  pre { background: #1f2933; color: #e8ecf1; padding: 8pt 10pt; border-radius: 5px;
+        font-family: "Liberation Mono", "DejaVu Sans Mono", Consolas, monospace; font-size: 8.6pt;
+        line-height: 1.38; white-space: pre-wrap; margin: 4pt 0 8pt 0; page-break-inside: avoid; }
+  pre .c { color: #9bb0c4; }
+  pre.cheat { font-size: 7.9pt; }
+  table { border-collapse: collapse; width: 100%; margin: 4pt 0 10pt 0; font-size: 9.2pt;
+          page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+  th, td { border: 0.6pt solid var(--line); padding: 4pt 5pt; vertical-align: top; text-align: left; }
+  th { background: var(--surface); font-weight: bold; }
+  td.n, th.n { text-align: right; white-space: nowrap; }
+  .cover { page-break-after: always; padding-top: 34mm; }
+  .cover .toc-h { font-weight: bold; color: var(--accent-dark); margin: 22pt 0 4pt 0; font-size: 11pt; }
+  .cover .toc { font-size: 9.6pt; }
+  .cover .kicker { color: var(--accent-dark); font-weight: bold; letter-spacing: .05em; font-size: 10pt; }
+  .cover h1 { font-size: 26pt; line-height: 1.15; margin: 8pt 0 10pt 0; }
+  .cover .sub { font-size: 13pt; color: var(--ink2); margin-bottom: 26pt; }
+  .cover .meta { font-size: 10.5pt; color: var(--ink2); line-height: 1.7; }
+  .cover .meta b { color: var(--ink); }
+  .box { border: 0.8pt solid var(--line); border-left: 4pt solid var(--accent); background: var(--surface2);
+         padding: 7pt 10pt; margin: 6pt 0 10pt 0; page-break-inside: avoid; border-radius: 3px; }
+  .box.warn { border-left-color: var(--warn); background: #fff6e8; }
+  .box.crit { border-left-color: var(--crit); background: #fdecec; }
+  .box.good { border-left-color: var(--good); background: #eaf6ea; }
+  .box .t { font-weight: bold; margin-bottom: 3pt; }
+  .fig { margin: 6pt 0 10pt 0; page-break-inside: avoid; }
+  .fig img { display: block; width: auto; max-width: 100%; max-height: 196mm; margin: 0 auto;
+             border: 0.6pt solid var(--line); border-radius: 3px; }
+  .fig .cap { font-size: 8.8pt; color: var(--muted); margin-top: 3pt; }
+  .say { border-left: 3pt solid var(--good); padding: 3pt 8pt; margin: 4pt 0 6pt 0; background: #f6fbf6;
+         font-style: italic; page-break-inside: avoid; }
+  .say b { font-style: normal; }
+  .small { font-size: 9pt; color: var(--ink2); }
+  .pb { page-break-before: always; }
+  .s0 { font-size: 9.8pt; line-height: 1.36; }
+  .s0 .box { padding: 5pt 9pt; margin: 5pt 0 7pt 0; }
+  .s0 h3 { margin-top: 8pt; }
+  .s0 .kpi-row { margin: 4pt 0 6pt 0; }
+  .s0 li { margin-bottom: 1.5pt; }
+  .kpi-row { display: flex; gap: 8pt; margin: 6pt 0 10pt 0; }
+  .kpi { flex: 1; border: 0.8pt solid var(--line); border-radius: 5px; padding: 6pt 8pt; background: #fff; }
+  .kpi .l { font-size: 8.5pt; color: var(--muted); }
+  .kpi .v { font-size: 15pt; font-weight: bold; color: var(--accent-dark); }
+  .kpi .s { font-size: 8.5pt; color: var(--ink2); }
+  .tag { display: inline-block; font-size: 8.3pt; padding: 0 5pt; border-radius: 3px; background: var(--surface);
+         color: var(--ink2); font-weight: bold; }
+  .tag.crit { background: #fdecec; color: var(--crit); }
+  .tag.warn { background: #fff6e8; color: var(--warn); }
+  .tag.good { background: #eaf6ea; color: var(--good); }
+  .toc ol { counter-reset: item; list-style: none; padding-left: 0; }
+  .toc li { margin: 2pt 0; }
+  .toc li span { color: var(--muted); }
+  .two { display: flex; gap: 12pt; }
+  .two > div { flex: 1; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ COVER -->
+<div class="cover">
+  <div class="kicker">ΔΙΠΛΩΜΑΤΙΚΗ ΕΡΓΑΣΙΑ · ATHENS MBA (ΟΠΑ | ΕΜΠ)</div>
+  <h1>Οδηγός Εκτέλεσης &amp; Παρουσίασης<br>του Ευφυούς Πράκτορα Αναπλήρωσης Αποθεμάτων</h1>
+  <div class="sub">Τι διορθώθηκε στον κώδικα, πώς τρέχει, τι να δείξεις στην επιτροπή και ποια οφέλη να αναδείξεις</div>
+  <div class="meta">
+    Σχεδίαση και Αξιολόγηση Ευφυούς Πράκτορα Αναπλήρωσης Αποθεμάτων με Διασύνδεση SAP ERP<br>
+    Φοιτητής: <b>Γεώργιος Δράκος</b> · Επιβλέπων: <b>Σωτήρης Γκαγιαλής</b>, Καθηγητής ΕΜΠ<br>
+    Κώδικας: <b>github.com/greltel/replenishment-agent</b>, branch <code>presentation-ready</code><br>
+    Έκδοση οδηγού: <b>22 Σεπτεμβρίου 2026</b>
+  </div>
+  <div class="box" style="margin-top:28pt">
+    <div class="t">Πώς να διαβάσεις αυτόν τον οδηγό</div>
+    Αν έχεις 10 λεπτά: διάβασε την <b>Ενότητα 0</b> (σύνοψη) και την <b>Ενότητα 7</b> (τι πρέπει να αλλάξει στη ΔΕ).
+    Πριν την πρόβα: Ενότητες <b>2, 3, 4</b>. Πριν την εξέταση: Ενότητες <b>5, 6, 8</b>.
+  </div>
+<!-- ============================================================ TOC -->
+<div class="toc-h">Περιεχόμενα</div>
+<div class="toc"><ol>
+  <li><b>0.</b> Σύνοψη σε μία σελίδα</li>
+  <li><b>1.</b> Τι διορθώθηκε στον κώδικα — και γιατί έχει σημασία για την επιτροπή</li>
+  <li><b>2.</b> Εγκατάσταση και εκτέλεση (Windows, βήμα-βήμα)</li>
+  <li><b>3.</b> Το dashboard, καρτέλα-καρτέλα: τι δείχνει και τι λες</li>
+  <li><b>4.</b> Σενάριο παρουσίασης 20 λεπτών με ζωντανή επίδειξη</li>
+  <li><b>5.</b> Τα οφέλη για την εταιρεία — πώς να τα παρουσιάσεις</li>
+  <li><b>6.</b> Ερωτήσεις της επιτροπής και προτεινόμενες απαντήσεις</li>
+  <li><b>7.</b> Τι πρέπει να ενημερωθεί στο κείμενο της ΔΕ πριν την παράδοση</li>
+  <li><b>8.</b> Λίστα ελέγχου για την ημέρα της εξέτασης</li>
+  <li><b>Παράρτημα Α.</b> Εντολές (cheat sheet) · <b>Β.</b> Αρχεία → Πίνακες ΔΕ · <b>Γ.</b> Τι αλλάζει με πραγματικά δεδομένα</li>
+</ol></div>
+
+</div>
+
+<!-- ============================================================ 0 -->
+<div class="s0">
+<h2>0. Σύνοψη σε μία σελίδα</h2>
+
+<p><b>Τι έγινε.</b> Έλεγξα ολόκληρο το codebase (≈12.600 γραμμές Python + 570 ABAP), έτρεξα όλο το pipeline και
+τα 183 tests, και έκλεισα <b>16 bugs</b> — τρία από αυτά θα φαίνονταν αμέσως σε ζωντανή επίδειξη ή σε ερώτηση
+της επιτροπής. Το dashboard ξαναγράφτηκε στα ελληνικά με ενιαίο design και μία καρτέλα «As-Is vs To-Be» που
+συγκεντρώνει όλη την αξιολόγηση (backtest, σενάρια, ευαισθησία, bootstrap, ablation). Δεν προστέθηκαν νέα
+features· ό,τι προστέθηκε (WMAPE, αδρανές απόθεμα, launchers) υπηρετεί την παρουσίαση. Τώρα περνούν
+<b>192 tests</b>. Όλα είναι σε τρία commits στο branch <code>presentation-ready</code> (§2.2).</p>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="l">Bugs που διορθώθηκαν</div><div class="v">16</div><div class="s">3 κρίσιμα για την επίδειξη</div></div>
+  <div class="kpi"><div class="l">Tests</div><div class="v">192 ✓</div><div class="s">ήταν 183 · νέα tests για κάθε fix</div></div>
+  <div class="kpi"><div class="l">Χρόνος πλήρους εκτέλεσης</div><div class="v">~7 λεπτά</div><div class="s">run_all.bat, 150 υλικά</div></div>
+  <div class="kpi"><div class="l">Χρόνος επίδειξης</div><div class="v">6 λεπτά</div><div class="s">3 καρτέλες, 8 κλικ</div></div>
+</div>
+
+<h3>Τα τρία ευρήματα που πρέπει να ξέρεις πριν κάνεις οτιδήποτε άλλο</h3>
+<div class="box crit">
+  <div class="t">1. Ο πράκτορας «έβλεπε» μηδενικό απόθεμα για όλα τα υλικά.</div>
+  Η ημερομηνία αναφοράς (AS_OF_DATE=auto) υπολογιζόταν από την τελευταία κίνηση, που είναι μία ημέρα πριν το snapshot
+  αποθέματος· έτσι το <code>get_current_stock(as_of)</code> επέστρεφε 0 για κάθε υλικό και <b>όλες</b> οι προτάσεις
+  (586/586) έβγαιναν «EXPEDITE». Διορθώθηκε (η ημερομηνία είναι η μεταγενέστερη από snapshot και κίνηση).
+</div>
+<div class="box crit">
+  <div class="t">2. Το κόστος διακράτησης στο backtest ήταν ετησιοποιημένο, ενώ η ΔΕ γράφει «για τη διάρκεια του παραθύρου».</div>
+  Η §3.6.1 και η §4.5.1 δηλώνουν ρητά ότι τα κόστη αφορούν τις 60 ημέρες. Ο κώδικας όμως υπολόγιζε
+  <i>μέση αξία αποθέματος × ετήσιο ποσοστό</i> (χωρίς ×60/365). Συνέπεια: το «ενδεικτικό ετήσιο ισοδύναμο ≈ €1,1 εκ.»
+  της §4.6 και του ROI (§5) πολλαπλασιάζει ήδη ετησιοποιημένα ποσά με 365/21 — υπερεκτίμηση κατά ~6–17 φορές.
+  Ο κώδικας τώρα δίνει κόστη παραθύρου <b>και</b> ετήσιο ισοδύναμο χωριστά (βλ. §7).
+</div>
+<div class="box crit">
+  <div class="t">3. Τα νούμερα των Πινάκων 4.6–4.13 πρέπει να ξαναπαραχθούν — και να δηλωθεί από ποια δεδομένα.</div>
+  Οι τιμές που έχει σήμερα η ΔΕ (π.χ. holding €586.722 → €403.837, 586 προτάσεις, 142 ανοιχτές παραγγελίες)
+  είναι οι τιμές του <b>συνθετικού</b> dataset της παλιάς έκδοσης του κώδικα (καταγράφονταν στο REPRODUCIBILITY.md), ενώ το
+  κείμενο περιγράφει εταιρεία με 1.547 υλικά και 18 μήνες ιστορικό. Με τις διορθώσεις αλλάζουν έτσι κι αλλιώς.
+  Τρέξε ξανά με το dataset που θα παρουσιάσεις και γράψε ρητά στη ΔΕ ποιο είναι (βλ. §7).
+</div>
+
+<h3>Τι πρέπει να κάνεις εσύ (με τη σειρά)</h3>
+<ol>
+  <li><b>Πάρε τον κώδικα</b>: εισαγωγή του <code>presentation-ready.bundle</code> (ή του zip) και push στο GitHub — §2.2.</li>
+  <li><b>Τρέξε τα πάντα</b>: <code>run_all.bat</code> (συνθετικά δεδομένα) ή <code>run_all.bat --keep-data</code> αν έχεις τα ανωνυμοποιημένα SAP — §2.4/2.5.</li>
+  <li><b>Άνοιξε το dashboard</b> (<code>start_dashboard.bat</code>) και πέρασε τις 6 καρτέλες με τον οδηγό της §3 μπροστά σου.</li>
+  <li><b>Ενημέρωσε τη ΔΕ</b> με τη λίστα της §7 (νούμερα από τα CSV της τελικής εκτέλεσης, βάση κόστους, Πίνακας 4.9, ROI).</li>
+  <li><b>Φτιάξε τις διαφάνειες</b> (≤ 20 λεπτά συνολικά με ερωτήσεις — Οδηγός §8.5) με screenshots ως εφεδρεία, και κάνε <b>δύο πρόβες</b> με χρονόμετρο — §4.</li>
+</ol>
+</div>
+
+<!-- ============================================================ 1 -->
+<h2 class="pb">1. Τι διορθώθηκε στον κώδικα — και γιατί έχει σημασία για την επιτροπή</h2>
+
+<p>Ο πίνακας είναι σε φθίνουσα σειρά σοβαρότητας. Η στήλη «Τι θα έβλεπε η επιτροπή» εξηγεί γιατί άξιζε να διορθωθεί
+πριν την παρουσίαση. Κάθε διόρθωση συνοδεύεται από test.</p>
+
+<table>
+<thead><tr><th style="width:3%">#</th><th style="width:27%">Πρόβλημα</th><th style="width:33%">Τι θα έβλεπε η επιτροπή</th><th style="width:37%">Διόρθωση (αρχείο)</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Η ημερομηνία αναφοράς (auto) έπεφτε μία μέρα πριν το snapshot αποθέματος → απόθεμα 0 παντού.</td>
+<td>586/586 προτάσεις «επείγουσες», €2,9 εκ. προτεινόμενες παραγγελίες σε 60 ημέρες. Το πρώτο πράγμα που φαίνεται στην οθόνη.</td>
+<td>Ημερομηνία αναφοράς = max(τελευταίο snapshot, τελευταία κίνηση). <code>src/utils/as_of_date.py</code></td></tr>
+<tr><td>2</td><td>Holding cost ετησιοποιημένο, stockout cost ανά παράθυρο → TCO σε μικτή βάση.</td>
+<td>«Το €190.945 είναι για 60 ημέρες ή για έτος;» — δεν υπήρχε σωστή απάντηση. Το ετήσιο ισοδύναμο €1,1 εκ. δεν προκύπτει.</td>
+<td>Όλα τα κόστη για το παράθυρο (holding × ημέρες/365)· πεδία <code>*_annualized</code> χωριστά· προστέθηκε <b>ordering cost</b> (πλήθος × €50) και TCO = holding + stockout + ordering, όπως ο Πίνακας 4.6. <code>src/utils/kpi.py</code></td></tr>
+<tr><td>3</td><td>Το MRP ξανα-παρήγγελνε το ίδιο έλλειμμα σε κάθε αναθεώρηση όταν η ανάγκη έπεφτε μέσα στο lead time (π.χ. 3 παραγγελίες ίδιας ημέρας).</td>
+<td>Στο To-Be ο πράκτορας κρατούσε <b>περισσότερο</b> απόθεμα από τον planner — αντίθετο από την υπόθεση της ΔΕ.</td>
+<td>Lead-time-aware netting: μία παραγγελία για το έλλειμμα που προβάλλεται στην ημερομηνία «σήμερα + LT», καταχώρηση παραλαβής εκεί, σήμανση ημερών κάτω από SS. <code>src/mrp/engine.py</code></td></tr>
+<tr><td>4</td><td>Η πολιτική Wagner-Whitin δεν εκτελούνταν ποτέ (silent fallback σε Lot-for-Lot).</td>
+<td>Η ΔΕ δηλώνει 5 αλγορίθμους lot sizing και «αυτόματη επιλογή». Ερώτηση «δείξτε μου ένα υλικό με W-W» = αδιέξοδο.</td>
+<td>Rolling-horizon Wagner-Whitin: DP στον ορίζοντα πρόβλεψης, εκδίδεται η πρώτη παραγγελία. <code>src/mrp/lot_sizing.py</code></td></tr>
+<tr><td>5</td><td>Το bootstrap έπαιρνε τα εκατοστημόρια των 30 τιμών (διασπορά ενός παραθύρου) — όχι bootstrap του μέσου.</td>
+<td>Η §3.6.3 περιγράφει bootstrap του μέσου με B = 2.000, t-CI, sign test. Ο Πίνακας 4.9 δεν μπορούσε να συμπληρωθεί.</td>
+<td>Στάδιο 2 όπως στη ΔΕ: B = 2.000 επαναδειγματοληψίες, CI του μέσου, bootstrap p, t-CI (df = 29), μονόπλευρος t-test, ακριβής έλεγχος προσήμου. <code>src/utils/bootstrap.py</code></td></tr>
+<tr><td>6</td><td>Ασύμμετρη σύγκριση As-Is / To-Be: αρνητικό απόθεμα μόνο στο As-Is, αυθαίρετο αρχικό απόθεμα (2×SS), το To-Be δεν «κληρονομούσε» τις παραγγελίες σε εξέλιξη.</td>
+<td>«Είναι δίκαιη η σύγκριση;» — η πιο πιθανή μεθοδολογική ερώτηση. Η απάντηση ήταν «όχι εντελώς».</td>
+<td>Ίδια δυναμική (lost sales), ίδιο αρχικό απόθεμα (ανακατασκευή από snapshot + κινήσεις), ίδια pipeline παραλαβών εντός lead time. <code>scripts/run_validation.py</code>, <code>repository.get_stock_at</code></td></tr>
+<tr><td>7</td><td>Το ablation είχε δικό του (αντιγραμμένο) προσομοιωτή.</td>
+<td>Baseline ablation ≠ To-Be του backtest (το σημείο 6 του README_Παράδοσης).</td>
+<td>Το ablation καλεί τον ίδιο <code>simulate_tobe</code> με <code>disabled_rules</code>. <code>scripts/run_rule_ablation.py</code></td></tr>
+<tr><td>8</td><td>POQ παρήγγελνε λιγότερο από το καθαρό έλλειμμα· POQ με σταθερή περίοδο 7 ημερών.</td>
+<td>Απόθεμα κάτω από SS μετά την παραλαβή· υπερβολικές παραγγελίες σε φθηνά υλικά.</td>
+<td>POQ ≥ καθαρή ανάγκη· περίοδος T* = EOQ/ημερήσια ζήτηση (7–60 ημ., Silver-Pyke-Peterson §6.5). <code>lot_sizing.py</code></td></tr>
+<tr><td>9</td><td>Ο κανόνας R-DEAD-STOCK χρησιμοποιούσε το «σήμερα» του dataset και όχι την ημερομηνία της προσομοίωσης.</td>
+<td>Σε παράθυρα bootstrap βαθιά στο ιστορικό, ενεργά υλικά χαρακτηρίζονταν νεκρό απόθεμα.</td>
+<td>Τα beliefs μεταφέρουν <code>as_of</code>· οι κανόνες το χρησιμοποιούν. <code>src/rules/policies.py</code>, <code>src/agent/*</code></td></tr>
+<tr><td>10</td><td>Η πρόβλεψη ζήτησης «αγκυρωνόταν» στην τελευταία κίνηση, όχι στο σήμερα.</td>
+<td>Υλικό χωρίς κατανάλωση 100 ημέρες → πρόβλεψη με τον παλιό ρυθμό → άσκοπες προτάσεις.</td>
+<td>Η ημερήσια σειρά τελειώνει στην ημερομηνία αναφοράς (μηδενικά στο τέλος). <code>src/utils/forecasting.py</code></td></tr>
+<tr><td>11</td><td>Πρόσημο κινήσεων 601/652 λάθος (πωλήσεις ως παραλαβές)· χάρτης DISLS: WB ≠ EOQ.</td>
+<td>Με πραγματικά δεδομένα: λάθος στατιστικά ζήτησης για τελικά προϊόντα· λάθος πολιτική για WB (εβδομαδιαίο lot).</td>
+<td>Σωστή σημειολογία BWART και πλήρης χάρτης SAP lot-sizing (EX, FX, WB, MB, PK, WI, BE, SP…). <code>anonymization.py</code></td></tr>
+<tr><td>12</td><td>Ανοιχτές παραγγελίες με ημερομηνία στο παρελθόν αγνοούνταν.</td>
+<td>Προτάσεις ενώ υπάρχει υλικό καθ’ οδόν.</td>
+<td>Καθυστερημένες παραλαβές θεωρούνται διαθέσιμες σήμερα (όπως στο SAP MRP). <code>engine.py</code></td></tr>
+<tr><td>13</td><td>Το γράφημα «κανόνες» έσπαγε τα ονόματα σε κάθε κενό (regex).</td>
+<td>Μία μπάρα με όνομα «|» στην Επισκόπηση.</td>
+<td><code>str.split(" | ", regex=False)</code>. <code>overview_tab.py</code></td></tr>
+<tr><td>14</td><td>Τα integration tests έγραφαν στην <b>πραγματική</b> βάση και στο validation_report.csv.</td>
+<td>Ένα <code>pytest</code> πριν την παρουσίαση = χαμένες προτάσεις και λάθος αναφορά στην οθόνη.</td>
+<td>Απομονωμένη βάση/φάκελοι στα tests (σωστά ονόματα μεταβλητών). <code>tests/test_integration.py</code></td></tr>
+<tr><td>15</td><td>«Περισσότερες παραγγελίες = καλύτερα» στη σύγκριση KPI.</td>
+<td>Πίνακας με ↑ better δίπλα στο n_orders.</td>
+<td>Ουδέτερο· η ανταλλαγή φαίνεται στο ordering cost. <code>kpi.py</code></td></tr>
+<tr><td>16</td><td>Το R-EXPEDITE σημείωνε ως επείγουσες <b>όλες</b> τις μελλοντικές παραγγελίες ενός κρίσιμου υλικού.</td>
+<td>«Γιατί είναι επείγουσα μια παραγγελία για τον Νοέμβριο;»</td>
+<td>Επείγουσα μόνο η παραγγελία που εκδίδεται άμεσα (εντός lead time). <code>policies.py</code></td></tr>
+</tbody></table>
+
+<h3>Τι άλλαξε στο dashboard</h3>
+<ul>
+  <li><b>Ελληνικά παντού</b>, ενιαίο θέμα (ένα μπλε για τον πράκτορα, γκρι για το As-Is, κόκκινο μόνο για «επείγον»), κρυμμένο το menu/«Deploy» του Streamlit, μεγαλύτερα tabs για προβολέα.</li>
+  <li><b>Επικεφαλίδα</b> με ημερομηνία αναφοράς, ορίζοντα, πλήθος υλικών, εύρος ιστορικού· <b>5 δείκτες</b>: προτάσεις, υλικά με πρόταση, επείγοντα υλικά, αξία παραγγελιών, αδρανές απόθεμα.</li>
+  <li><b>Επισκόπηση</b>: επεξήγηση κύκλου BDI (αναδιπλούμενη), προτάσεις/αξία ανά κλάση ABC, εβδομαδιαίο χρονοδιάγραμμα, ενεργοποίηση κανόνων, λίστα επειγόντων.</li>
+  <li><b>Προτάσεις</b>: λίστα εργασιών planner με φίλτρα, ελληνικές στήλες, εξαγωγή CSV/Excel.</li>
+  <li><b>Ανάλυση υλικού</b>: πίνακας master data, <b>αιτιολόγηση σε απλή γλώσσα</b> («γιατί προτείνει ο πράκτορας;»), προβολή αποθέματος με ζώνη κάτω από SS, αφίξεις παραγγελιών, πλήρης πίνακας MRP, ιστορικό.</li>
+  <li><b>Πρόβλεψη ζήτησης</b>: εξομαλυμένο ιστορικό, τρεις μέθοδοι, αξιολόγηση σε εβδομαδιαίο επίπεδο με WMAPE (το ημερήσιο MAPE σε διακοπτόμενη ζήτηση ήταν 150–170%).</li>
+  <li><b>As-Is vs To-Be</b>: backtest (KPI + σύνθεση TCO + ανάλυση holding + ανά ABC), σενάρια κόστους, ευαισθησία, bootstrap (ιστόγραμμα + CI), ablation — όλα από τα CSV, με την εντολή που τα παράγει όταν λείπουν.</li>
+  <li><b>AI Copilot</b>: ίδια λειτουργία, ελληνικές οδηγίες, πάντα συνδεδεμένος στη ζωντανή βάση.</li>
+</ul>
+
+<h3>Μικρές προσθήκες που υπηρετούν την παρουσίαση</h3>
+<ul>
+  <li><b>Ρεαλιστικά συνθετικά δεδομένα</b>: ο γεννήτορας προσομοιώνει «ανθρώπινο planner» (εβδομαδιαίες αναθεωρήσεις που ξεχνιούνται, καθυστερήσεις, μεγάλες παρτίδες), εποχικά/νέα/αδρανή υλικά, και παράγει <b>εσωτερικά συνεπές</b> dataset (snapshot = άνοιγμα + παραλαβές − αναλώσεις). Σταθερή ημερομηνία snapshot (21.09.2026) ώστε τα νούμερα να είναι ίδια όποια μέρα τρέξει.</li>
+  <li><b>Launchers</b> <code>run_all.bat</code>, <code>start_dashboard.bat</code> (Windows) και <code>run_all.sh</code>.</li>
+  <li><b>Τεκμηρίωση</b>: README, REPRODUCIBILITY.md και Παράρτημα Δ (PDF) ενημερώθηκαν στη νέα βάση κόστους, στο δισταδιακό bootstrap και στο lead-time-aware MRP. Χάρτης «αρχείο CSV → Πίνακας ΔΕ».</li>
+</ul>
+
+<!-- ============================================================ 2 -->
+<h2 class="pb">2. Εγκατάσταση και εκτέλεση (Windows, βήμα-βήμα)</h2>
+
+<h3>2.1 Προαπαιτούμενα</h3>
+<ul>
+  <li><b>Python 3.11 ή 3.12</b> (python.org, με «Add python.exe to PATH»). Έλεγχος: <code>python --version</code>.</li>
+  <li><b>Git</b> (git-scm.com) — ή λήψη ZIP από το GitHub.</li>
+  <li>Προαιρετικά για το Copilot: <b>Ollama</b> (ollama.com) και <code>ollama pull llama3.1:8b</code> (≈4,7 GB, μία φορά).</li>
+  <li>Χώρος δίσκου ~1 GB, χωρίς GPU. Το dashboard ανοίγει σε οποιονδήποτε browser (Chrome/Edge).</li>
+</ul>
+
+<h3>2.2 Λήψη του κώδικα</h3>
+<p>Το branch <code>presentation-ready</code> σου παραδίδεται ως αρχείο <code>presentation-ready.bundle</code> (μαζί με τον οδηγό),
+γιατί δεν είχα δικαίωμα push στο GitHub σου. Το bundle περιέχει τα commits πάνω από το τρέχον <code>main</code> (<code>db88bdf</code>)· το εισάγεις
+στο τοπικό σου repo και το ανεβάζεις εσύ:</p>
+<pre><span class="c"># Στο τοπικό σου clone (πρέπει να είναι στο main, commit db88bdf)</span>
+cd C:\Projects\replenishment-agent
+git fetch C:\Downloads\presentation-ready.bundle presentation-ready:presentation-ready
+git checkout presentation-ready
+git push -u origin presentation-ready        <span class="c"># ανέβασέ το στο GitHub</span>
+<span class="c"># Όταν είσαι ικανοποιημένος, ενσωμάτωσέ το στο main:</span>
+git checkout main
+git merge presentation-ready
+git push origin main</pre>
+<p class="small">Εναλλακτικά (χωρίς git): αποσυμπίεσε το <code>replenishment-agent-presentation-ready.zip</code> που συνοδεύει τον οδηγό — είναι
+ο πλήρης φάκελος του project στο ίδιο commit — και συνέχισε από το §2.3.</p>
+
+<h3>2.3 Περιβάλλον Python (μία φορά)</h3>
+<pre>python -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt</pre>
+<p class="small">Αν το PowerShell αρνηθεί το activate: <code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code> και ξανά.</p>
+
+<h3>2.4 Πλήρης εκτέλεση με συνθετικά δεδομένα (~7 λεπτά)</h3>
+<pre>run_all.bat</pre>
+<p>Εκτελεί με τη σειρά: δημιουργία δεδομένων (150 υλικά, 12 μήνες) → ETL σε SQLite → πράκτορας (perceive → deliberate → act)
+→ backtest 60 ημερών → 3 σενάρια κόστους → ανάλυση ευαισθησίας → 30 τυχαία παράθυρα + bootstrap → rule ablation (stress).
+Στο τέλος υπάρχουν στον φάκελο τα αρχεία <code>validation_report*.csv</code>, <code>bootstrap_report*.csv</code>,
+<code>ablation_report.csv</code> και η βάση <code>replenishment.db</code>. Τα ίδια βήματα, ένα-ένα, στο Παράρτημα Α.</p>
+
+<h3>2.5 Εκτέλεση με τα πραγματικά (ανωνυμοποιημένα) δεδομένα SAP</h3>
+<ol>
+  <li>Τρέξε το <code>ZMRP_AGENT_EXPORT</code> στο SAP (φάκελος <code>abap/</code>) → 6 CSV· αντέγραψέ τα στο <code>data\raw\</code>.</li>
+  <li><code>python -m src.data_layer.anonymization</code> → <code>data\anonymized\*.csv</code> (ψευδώνυμα, πρόσημα κινήσεων, smart defaults master data).</li>
+  <li><code>run_all.bat --keep-data</code> (δεν ξαναδημιουργεί συνθετικά δεδομένα· το ETL προτιμά αυτόματα το <code>data\anonymized</code>).</li>
+  <li>Στο dashboard έλεγξε ότι η <b>ημερομηνία αναφοράς</b> είναι η ημερομηνία εξαγωγής από το SAP (και όχι σημερινή). Αν θέλεις άλλη: <code>.env</code> → <code>AS_OF_DATE=2026-01-28</code>.</li>
+</ol>
+<div class="box warn"><div class="t">Προσοχή στα πραγματικά δεδομένα</div>
+Ο φάκελος <code>data\raw</code> είναι στο <code>.gitignore</code> — ποτέ στο GitHub. Τα ψευδώνυμα (MD5) είναι μη αναστρέψιμα.
+Το backtest χρειάζεται ≥ 90 ημέρες ιστορικό κινήσεων πριν το snapshot· το bootstrap ≥ 6 μήνες για 30 παράθυρα 21 ημερών.
+Με 1.500+ υλικά οι χρόνοι είναι ~10× (bootstrap ≈ 15 λεπτά): τρέξε τα από την προηγούμενη μέρα.</div>
+
+<h3>2.6 Εκκίνηση του dashboard</h3>
+<pre>start_dashboard.bat
+<span class="c"># ή: streamlit run dashboard\app.py</span></pre>
+<p>Ανοίγει στο <code>http://localhost:8501</code>. Κλείσιμο: κλείσε το παράθυρο ή Ctrl+C. Το κουμπί «Εκτέλεση πράκτορα» στο
+πλάι ξανατρέχει τον κύκλο BDI (2–10 δευτερόλεπτα) και ανανεώνει τις προτάσεις — ασφαλές να το πατήσεις ζωντανά.</p>
+
+<h3>2.7 Επαλήθευση ότι όλα είναι εντάξει</h3>
+<table>
+<thead><tr><th>Έλεγχος</th><th>Πώς</th><th>Αναμενόμενο</th></tr></thead>
+<tbody>
+<tr><td>Tests</td><td><code>pytest -q</code></td><td>192 passed (≈15 s). Τα tests τρέχουν σε απομονωμένη βάση — δεν πειράζουν τα δεδομένα σου.</td></tr>
+<tr><td>Πράκτορας</td><td><code>python scripts\run_agent.py</code></td><td>Με συνθετικά δεδομένα: 108 προτάσεις, 50 υλικά, 4 επείγουσες.</td></tr>
+<tr><td>Dashboard</td><td>Άνοιξε τις 6 καρτέλες</td><td>Καμία κόκκινη προειδοποίηση «Δεν βρέθηκε …» στην καρτέλα As-Is vs To-Be.</td></tr>
+<tr><td>Ημερομηνία αναφοράς</td><td>Επικεφαλίδα</td><td>= ημερομηνία snapshot (21.09.2026 στα συνθετικά).</td></tr>
+</tbody></table>
+
+<h3>2.8 Αν κάτι πάει στραβά</h3>
+<table>
+<thead><tr><th style="width:38%">Σύμπτωμα</th><th>Αιτία / λύση</th></tr></thead>
+<tbody>
+<tr><td><code>ModuleNotFoundError: No module named 'src'</code></td><td>Τρέξε τις εντολές από τον ριζικό φάκελο του project (εκεί που είναι το <code>requirements.txt</code>).</td></tr>
+<tr><td><code>no such table: materials</code></td><td>Δεν έτρεξε το ETL: <code>python scripts\run_etl.py</code>.</td></tr>
+<tr><td>Η καρτέλα As-Is vs To-Be λέει «Δεν βρέθηκε αναφορά»</td><td>Λείπει CSV· η οθόνη δείχνει την εντολή που το παράγει. Τα CSV πρέπει να είναι στον ριζικό φάκελο.</td></tr>
+<tr><td>Όλες οι προτάσεις επείγουσες / απόθεμα 0 παντού</td><td>Παλιά έκδοση κώδικα (branch main πριν το merge) ή <code>AS_OF_DATE</code> λάθος στο <code>.env</code>. Σβήσε τη γραμμή ή βάλε <code>auto</code>.</td></tr>
+<tr><td>Το Copilot γράφει «Ollama δεν είναι διαθέσιμο»</td><td>Άνοιξε την εφαρμογή Ollama (ή <code>ollama serve</code>) και έλεγξε <code>ollama list</code>. Δεν είναι απαραίτητο για την επίδειξη.</td></tr>
+<tr><td>Port 8501 σε χρήση</td><td><code>streamlit run dashboard\app.py --server.port 8502</code>.</td></tr>
+<tr><td>Streamlit εμφανίζει προειδοποίηση για <code>use_container_width</code></td><td>Αβλαβές· ο κώδικας προσαρμόζεται αυτόματα σε παλιές/νέες εκδόσεις. Ενημέρωση: <code>pip install -U streamlit</code>.</td></tr>
+</tbody></table>
+
+<!-- ============================================================ 3 -->
+<h2 class="pb">3. Το dashboard, καρτέλα-καρτέλα: τι δείχνει και τι λες</h2>
+
+<p>Σε κάθε καρτέλα: <b>τι βλέπει η επιτροπή</b>, <b>τι σημαίνει</b> και μία πρόταση που μπορείς να πεις αυτούσια (σε πλάγια).
+Τα νούμερα των εικόνων είναι από τα συνθετικά δεδομένα· με τα πραγματικά θα διαφέρουν.</p>
+
+<h3>3.0 Επικεφαλίδα και δείκτες (σε όλες τις καρτέλες)</h3>
+<div class="fig"><img src="img/header_kpis.png"><div class="cap">Επικεφαλίδα: ημερομηνία αναφοράς, ορίζοντας, υλικά, εύρος ιστορικού, επείγοντα υλικά. Δείκτες: προτάσεις, υλικά με πρόταση, επείγοντα, αξία παραγγελιών, αδρανές απόθεμα.</div></div>
+<ul>
+  <li><b>Ημερομηνία αναφοράς</b>: το «σήμερα» του πράκτορα = ημερομηνία εξαγωγής από το SAP. Όλα (πρόβλεψη, MRP, κανόνες) υπολογίζονται ως προς αυτή.</li>
+  <li><b>Επείγοντα υλικά</b>: απόθεμα κάτω από το 50% του safety stock (κανόνας R-EXPEDITE) — αυτά κοιτάζει πρώτα ο planner.</li>
+  <li><b>Αδρανές απόθεμα</b>: υλικά χωρίς κατανάλωση 180+ ημέρες και η αξία που δεσμεύουν — ο κανόνας R-DEAD-STOCK δεν τους παραγγέλνει τίποτα.</li>
+</ul>
+<div class="say"><b>Λες:</b> «Ο πράκτορας διάβασε το snapshot του SAP της 21ης Σεπτεμβρίου: 150 υλικά, 25.000 κινήσεις, 18 ανοιχτές παραγγελίες. Σε δύο δευτερόλεπτα παρήγαγε 108 προτάσεις για 50 υλικά, από τα οποία 3 είναι επείγοντα.»</div>
+
+<h3>3.1 Επισκόπηση</h3>
+<div class="fig"><img src="img/overview_top.png"><div class="cap">Επισκόπηση (πάνω μέρος): προτάσεις και αξία παραγγελιών ανά κλάση ABC, χρονοδιάγραμμα παραγγελιών ανά εβδομάδα. Το πλαίσιο «Πώς αποφασίζει ο πράκτορας» ανοίγει με κλικ.</div></div>
+<div class="fig"><img src="img/overview_bottom.png"><div class="cap">Επισκόπηση (κάτω μέρος): ενεργοποίηση κανόνων και επείγουσες προτάσεις.</div></div>
+<ul>
+  <li><b>Κύκλος BDI</b> (πλαίσιο «Πώς αποφασίζει ο πράκτορας», άνοιξέ το με κλικ): Beliefs (δεδομένα SAP) → Desires (στόχοι) → Deliberation (πρόβλεψη → MRP → lot sizing → 7 κανόνες) → Intentions (προτάσεις «πότε και πόσο»). Αυτό είναι το Σχήμα 4.1 της ΔΕ σε λειτουργία.</li>
+  <li><b>Προτάσεις / αξία ανά κλάση ABC</b>: η αξία συγκεντρώνεται στα A-items (Pareto) — εκεί αξίζει η προσοχή του planner.</li>
+  <li><b>Χρονοδιάγραμμα</b>: πόση ποσότητα εκδίδεται ανά εβδομάδα στον ορίζοντα 60 ημερών — ο planner βλέπει τον φόρτο των επόμενων εβδομάδων.</li>
+  <li><b>Ενεργοποίηση κανόνων</b>: πόσες προτάσεις άγγιξε κάθε κανόνας. Οι «buffer» κανόνες μεταβάλλουν ποσότητες, οι «ενημερωτικοί» (expedite, cost) προσθέτουν πληροφορία.</li>
+</ul>
+<div class="say"><b>Λες:</b> «Κάθε πρόταση περνά από επτά κανόνες με προτεραιότητα. Εδώ βλέπουμε ότι 58 προτάσεις πήραν το +20% buffer των A-items και 4 σημάνθηκαν επείγουσες. Η λογική είναι διαφανής — μπορούμε να δούμε ποιος κανόνας άγγιξε κάθε παραγγελία.»</div>
+
+<h3>3.2 Προτάσεις (λίστα εργασιών planner)</h3>
+<div class="fig"><img src="img/proposals_main.png"><div class="cap">Λίστα προτάσεων: επείγον, υλικό, ημερομηνία έκδοσης, ποσότητα, κόστος, προμηθευτής, lead time, πολιτική lot sizing, κανόνες.</div></div>
+<ul>
+  <li>Το <b>παραδοτέο του πράκτορα</b> για τον planner: κάθε γραμμή = μία παραγγελία (πότε να εκδοθεί, πόσο). Ταξινόμηση με κλικ στις στήλες, φίλτρα (επείγον, ποσότητα, ημερομηνία, αναζήτηση), εξαγωγή σε Excel/CSV για το SAP (ME21N ή mass upload).</li>
+  <li>Η στήλη <b>Κανόνες</b> είναι το audit trail: γιατί η ποσότητα είναι αυτή που είναι.</li>
+</ul>
+<div class="say"><b>Λες:</b> «Ο πράκτορας δεν εκτελεί παραγγελίες — προτείνει. Ο planner παίρνει αυτή τη λίστα, την εγκρίνει ή τη διορθώνει, και την περνά στο SAP. Human-in-the-loop, όπως απαιτεί και το EU AI Act για υποστήριξη αποφάσεων.»</div>
+
+<h3>3.3 Ανάλυση υλικού («γιατί προτείνει ο πράκτορας;»)</h3>
+<div class="fig"><img src="img/drilldown_top.png"><div class="cap">Master data και αιτιολόγηση σε απλή γλώσσα για ένα κρίσιμο A-item.</div></div>
+<div class="fig"><img src="img/drilldown_chart.png"><div class="cap">Προβολή αποθέματος 60 ημερών: μπλε γραμμή = προβλεπόμενο απόθεμα, κόκκινη διακεκομμένη = safety stock, ρόμβος = παραλαβή ανοιχτής παραγγελίας, πράσινα τρίγωνα = αφίξεις προτεινόμενων παραγγελιών, ροζ ζώνη = ημέρες κάτω από SS.</div></div>
+<ul>
+  <li>Η <b>πιο σημαντική καρτέλα για την επιτροπή</b>: δείχνει ότι ο πράκτορας είναι εξηγήσιμος. Επίλεξε ένα κρίσιμο A-item (προεπιλογή) και διάβασε την αιτιολόγηση: απόθεμα, κάλυψη σε ημέρες, πρόβλεψη, safety stock, lead time, πολιτική lot sizing, η απόφαση MRP και η προειδοποίηση «ανάγκη μέσα στο lead time».</li>
+  <li>Το γράφημα είναι ο Πίνακας 4.2 της ΔΕ οπτικοποιημένος: το απόθεμα πέφτει, φτάνει η ανοιχτή παραγγελία, μετά ο πράκτορας «γεμίζει» ακριβώς στο safety stock με την πολιτική του υλικού (εδώ Wagner-Whitin).</li>
+  <li>Αλλάζοντας «Μέθοδος πρόβλεψης» ή «Ορίζοντας» ο υπολογισμός ξαναγίνεται ζωντανά.</li>
+</ul>
+<div class="say"><b>Λες:</b> «Για το υλικό αυτό έχουμε 43 κιλά, δηλαδή 2 ημέρες κάλυψης, με lead time 18 ημερών. Ο πράκτορας βλέπει ότι μια παραγγελία 800 κιλών φτάνει σε τρεις ημέρες, οπότε δεν πανικοβάλλεται· προγραμματίζει την επόμενη παραγγελία για τις 3 Οκτωβρίου ώστε να φτάσει ακριβώς όταν το απόθεμα αγγίξει το όριο ασφαλείας. Κάθε βήμα αυτής της σκέψης είναι στην οθόνη.»</div>
+
+<h3>3.4 Πρόβλεψη ζήτησης</h3>
+<div class="fig"><img src="img/forecast_top.png"><div class="cap">Επιλογή υλικού, ιστορικού και ορίζοντα· σύνοψη κατανάλωσης και μεταβλητότητας (CV)· ιστορικό (ημερήσιο και εξομαλυμένο) με τις τρεις μεθόδους πρόβλεψης.</div></div>
+<div class="fig"><img src="img/forecast_bottom.png"><div class="cap">Walk-forward validation σε εβδομαδιαίο επίπεδο (WMAPE, MAE, RMSE) και η σύσταση του πράκτορα.</div></div>
+<ul>
+  <li>Ο πράκτορας δεν «εμπιστεύεται» μία μέθοδο· μετρά ποια ταιριάζει στο μοτίβο του υλικού (rolling-origin, 5 παράθυρα).</li>
+  <li>Η αξιολόγηση γίνεται σε <b>εβδομαδιαίες ποσότητες</b> με <b>WMAPE</b> (Σ|σφάλμα|/Σ|ζήτηση|): σε ημερήσια, διακοπτόμενη ζήτηση το απλό MAPE ξεπερνά το 150% και δεν λέει τίποτα (Syntetos &amp; Boylan 2005). Υπάρχει επιλογή για ημερήσιο επίπεδο αν σε ρωτήσουν.</li>
+  <li>Η σύσταση συνδέει τη μεταβλητότητα (CV) με το ρόλο του safety stock: όσο πιο ασταθής η ζήτηση, τόσο περισσότερο «δουλεύει» το SS και όχι η πρόβλεψη.</li>
+</ul>
+<div class="say"><b>Λες:</b> «Με CV 1,4 καμία απλή μέθοδος δεν προβλέπει τη μέρα· προβλέπουμε την εβδομάδα με σφάλμα ~30% και αφήνουμε το safety stock, που υπολογίζεται από τη διακύμανση, να απορροφήσει το υπόλοιπο. Αυτό είναι ακριβώς το σκεπτικό του Silver-Pyke-Peterson.»</div>
+
+<h3>3.5 As-Is vs To-Be — η αξιολόγηση</h3>
+<div class="fig"><img src="img/validation_backtest.png"><div class="cap">Backtest 60 ημερών: πέντε δείκτες, σύνθεση TCO (διακράτηση / ελλείψεις / παραγγελίες) και ανάλυση holding cost, As-Is (γκρι) έναντι To-Be (μπλε).</div></div>
+<ul>
+  <li><b>Δίκαιη σύγκριση</b>: ίδιο αρχικό απόθεμα, ίδιες παραγγελίες σε εξέλιξη, ίδια ζήτηση, καμία πρόσβαση σε μελλοντικά δεδομένα. Ο πράκτορας αποφασίζει κάθε 7 ημέρες.</li>
+  <li>Στα συνθετικά δεδομένα: TCO −19,5% (€180 χιλ. → €145 χιλ. στις 60 ημέρες), επίπεδο εξυπηρέτησης 98,9% → 99,7%, ημέρες έλλειψης −70%, μέσο απόθεμα −17,7%, <b>αλλά</b> κόστος παραγγελιών ×2,5 — η ανταλλαγή είναι ορατή και ειλικρινής.</li>
+</ul>
+<div class="fig"><img src="img/validation_scenarios.png"><div class="cap">Σενάρια κόστους (conservative / realistic / aggressive) και ανάλυση ευαισθησίας (±20% lead time, ±10% ζήτηση, ±20% holding rate).</div></div>
+<ul>
+  <li><b>Σενάρια</b>: η εξοικονόμηση διατηρείται και αυξάνεται μονοτονικά με το holding rate (14% → 20% → 24% στα συνθετικά).</li>
+  <li><b>Ευαισθησία</b>: όλες οι διαταράξεις δίνουν θετική εξοικονόμηση (€16 χιλ. – €85 χιλ.) — το συμπέρασμα δεν εξαρτάται από μία παράμετρο.</li>
+</ul>
+<div class="fig"><img src="img/validation_bootstrap.png"><div class="cap">Τυχαία παράθυρα και bootstrap: μέση εξοικονόμηση ανά παράθυρο, 95% CI του μέσου, t-test/έλεγχος προσήμου, ιστόγραμμα με το CI και διάγραμμα ανά παράθυρο (κόκκινο = αρνητικό παράθυρο).</div></div>
+<ul>
+  <li>Απαντά στην ερώτηση «μήπως διάλεξες βολικό παράθυρο;»: 30 τυχαία παράθυρα 21 ημερών, bootstrap του μέσου (B = 2.000), CI που δεν περιλαμβάνει το 0, 28/30 θετικά, τρεις έλεγχοι συμφωνούν (p &lt; 0,001). Δύο αρνητικά παράθυρα υπάρχουν — και είναι καλό που φαίνονται: δείχνει ότι το τεστ έχει ισχύ.</li>
+</ul>
+<div class="fig"><img src="img/validation_ablation.png"><div class="cap">Rule ablation (stress test): μεταβολή TCO όταν αφαιρείται κάθε κανόνας.</div></div>
+<ul>
+  <li><b>Ablation</b>: ποιοι κανόνες «κοστίζουν» και ποιοι «εξοικονομούν» σε αυτό το παράθυρο. Οι κανόνες με μηδενική επίδραση είναι είτε ενημερωτικοί (expedite, cost) είτε δίχτυα ασφαλείας που δεν ενεργοποιήθηκαν (dead stock, MOQ). Οι δύο buffer κανόνες κοστίζουν εδώ επειδή η προσομοίωση έχει <b>ντετερμινιστικά lead times</b> — δείτε §6, ερώτηση 9.</li>
+</ul>
+
+<h3>3.6 AI Copilot</h3>
+<div class="fig"><img src="img/copilot_main.png"><div class="cap">Ο Copilot χωρίς Ollama: εξηγεί τι χρειάζεται. Με Ollama εμφανίζονται γρήγορες ερωτήσεις και chat.</div></div>
+<ul>
+  <li>Τοπικό LLM (Ollama, llama3.1:8b) με 7 read-only εργαλεία πάνω στη βάση: εξηγεί, δεν αποφασίζει, και τα δεδομένα δεν φεύγουν από τον υπολογιστή.</li>
+  <li>Στην επίδειξη: δείξε το μόνο αν έχεις δοκιμάσει την ίδια ερώτηση την ίδια μέρα (τα LLM αργούν 10–40 s σε laptop χωρίς GPU). Ασφαλής ερώτηση: «Ποια υλικά είναι κρίσιμα τώρα;».</li>
+</ul>
+
+<!-- ============================================================ 4 -->
+<h2 class="pb">4. Σενάριο παρουσίασης 20 λεπτών με ζωντανή επίδειξη</h2>
+
+<div class="box"><div class="t">Το πλαίσιο του Οδηγού ΔΕ</div>
+Η εξέταση <b>δεν υπερβαίνει τα 20 λεπτά</b> συνολικά — παρουσίαση και ερωτήσεις (Αναλυτικός Οδηγός §8.5· ο Συνοπτικός λέει 25).
+Οι διαφάνειες αποστέλλονται μία εβδομάδα πριν ως <code>2027ΠΑΡ_ΔΡΑΚΟΣ ΓΕΩΡΓΙΟΣ.pdf</code>. Άρα: <b>12–13 λεπτά ομιλία</b>
+(από τα οποία 5–6 ζωντανή επίδειξη) και <b>7–8 λεπτά ερωτήσεις</b>. Τα κριτήρια αξιολόγησης (Παράρτημα 2 του Οδηγού) βαθμολογούν
+χωριστά την «προφορική υποστήριξη» — η ζωντανή επίδειξη είναι ο τρόπος να πάρεις 9,5–10 εκεί.</div>
+
+<h3>4.1 Χρονοδιάγραμμα</h3>
+<table>
+<thead><tr><th style="width:11%">Λεπτό</th><th style="width:26%">Ενότητα</th><th>Περιεχόμενο / διαφάνειες</th></tr></thead>
+<tbody>
+<tr><td>0:00–1:00</td><td>Άνοιγμα</td><td>Τίτλος, ένα «γιατί»: «Οι planners μιας εταιρείας με 1.500 κωδικούς δεν μπορούν να βελτιστοποιήσουν 1.500 αποφάσεις την εβδομάδα. Το SAP MRP είναι στατικό. Έφτιαξα έναν πράκτορα που το κάνει — και τον μέτρησα.» (1 διαφάνεια)</td></tr>
+<tr><td>1:00–3:00</td><td>Πρόβλημα &amp; ερευνητικά ερωτήματα</td><td>Ελλείψεις + υπεραποθέματα + χειροκίνητες παρεμβάσεις (§1.2)· τα ερευνητικά ερωτήματα (ΥΕ1–ΥΕ4)· η μελέτη περίπτωσης. (2 διαφάνειες)</td></tr>
+<tr><td>3:00–5:00</td><td>Μεθοδολογία &amp; αρχιτεκτονική</td><td>Design Science Research· τρι-επίπεδη αρχιτεκτονική (SAP → ABAP → SQLite → πράκτορας → dashboard)· κύκλος BDI· 5 lot sizing + 7 κανόνες· πλαίσιο αξιολόγησης (backtest, bootstrap, ablation, ευαισθησία). (2–3 διαφάνειες, Σχήμα 3.1/4.1)</td></tr>
+<tr><td>5:00–11:00</td><td><b>Ζωντανή επίδειξη</b></td><td>Βλ. 4.2 — Επισκόπηση (1΄) → Ανάλυση υλικού (2΄) → As-Is vs To-Be (3΄). Μία διαφάνεια-γέφυρα «Ας το δούμε να τρέχει».</td></tr>
+<tr><td>11:00–13:00</td><td>Αποτελέσματα &amp; οφέλη</td><td>Ένας πίνακας με τα KPI του backtest (60 ημ.) + bootstrap σε μία γραμμή + τα οφέλη για την εταιρεία (§5). (2 διαφάνειες)</td></tr>
+<tr><td>13:00–13:30</td><td>Περιορισμοί &amp; μελλοντική εργασία</td><td>Counterfactual προσομοίωση, ντετερμινιστικά lead times, As-Is baseline, πιλοτική εφαρμογή. (1 διαφάνεια — δείχνει κριτική σκέψη, κριτήριο αξιολόγησης)</td></tr>
+<tr><td>13:30–20:00</td><td>Ερωτήσεις</td><td>§6. Κράτα το dashboard ανοιχτό — πολλές απαντήσεις δίνονται με ένα κλικ.</td></tr>
+</tbody></table>
+
+<h3>4.2 Το σενάριο της ζωντανής επίδειξης (6 λεπτά, 8 κλικ)</h3>
+<p><b>Προετοιμασία 10 λεπτά πριν</b>: <code>start_dashboard.bat</code>, browser σε πλήρη οθόνη (F11), zoom 110%, πλευρική μπάρα <b>κλειστή</b>
+(βελάκι ««» πάνω αριστερά) ώστε τα γραφήματα να είναι μεγάλα, καρτέλα «Επισκόπηση» ανοιχτή, κλειστό το Copilot expander.
+Έχε δοκιμάσει την ίδια ροή το πρωί.</p>
+
+<table>
+<thead><tr><th style="width:8%">Βήμα</th><th style="width:30%">Κλικ</th><th>Τι λες (30–45 δευτερόλεπτα το καθένα)</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Επισκόπηση — δείξε επικεφαλίδα και δείκτες</td><td>«Αυτή είναι η κατάσταση την ημέρα εξαγωγής από το SAP: Χ υλικά, Υ κινήσεις. Ο πράκτορας παρήγαγε Ν προτάσεις σε λίγα δευτερόλεπτα, από τις οποίες Κ επείγουσες.»</td></tr>
+<tr><td>2</td><td>Άνοιξε «Πώς αποφασίζει ο πράκτορας»</td><td>«Beliefs από το SAP, Desires = επίπεδο εξυπηρέτησης 98% με ελάχιστο κόστος, Deliberation = πρόβλεψη → MRP → lot sizing → 7 κανόνες, Intentions = πότε και πόσο.» (Κλείσε το ξανά.)</td></tr>
+<tr><td>3</td><td>Κατέβα στο «Ενεργοποίηση κανόνων»</td><td>«Η γνώση της εταιρείας είναι κωδικοποιημένη σε κανόνες με προτεραιότητα· βλέπουμε ποιος άγγιξε πόσες προτάσεις. Αυτό δεν το κάνει το standard MRP.»</td></tr>
+<tr><td>4</td><td>Καρτέλα «Ανάλυση υλικού» (προεπιλεγμένο κρίσιμο A-item)</td><td>Διάβασε την αιτιολόγηση δυνατά (3.3). «Κάθε πρόταση είναι εξηγήσιμη — αυτό ζητούν οι planners και αυτό ζητά ο νόμος.»</td></tr>
+<tr><td>5</td><td>Δείξε το γράφημα προβολής</td><td>«Το απόθεμα, το όριο ασφαλείας, η ανοιχτή παραγγελία που φτάνει, και οι αφίξεις που προτείνει ο πράκτορας ώστε να μην πέσουμε ποτέ κάτω από το όριο.»</td></tr>
+<tr><td>6</td><td>Άλλαξε «Μέθοδος πρόβλεψης» σε εκθετική εξομάλυνση</td><td>«Ο υπολογισμός ξαναγίνεται ζωντανά· η πολιτική είναι παραμετροποιήσιμη ανά υλικό και ανά εταιρεία.» (Επανάφερε.)</td></tr>
+<tr><td>7</td><td>Καρτέλα «As-Is vs To-Be» — οι 5 δείκτες + σύνθεση TCO</td><td>«Ξαναπαίξαμε 60 ημέρες ιστορικού. Γκρι = ό,τι έκανε η εταιρεία, μπλε = ο πράκτορας με τα ίδια δεδομένα, χωρίς να βλέπει το μέλλον. Λιγότερο απόθεμα, λιγότερες ελλείψεις, λίγο περισσότερες παραγγελίες — καθαρά Χ% χαμηλότερο συνολικό κόστος.»</td></tr>
+<tr><td>8</td><td>Κατέβα στο bootstrap (ιστόγραμμα) και στο ablation</td><td>«Για να μην είναι τυχαίο: 30 τυχαία παράθυρα, διάστημα εμπιστοσύνης που δεν περιλαμβάνει το μηδέν, 28 στα 30 θετικά. Και κάθε κανόνας μετρήθηκε χωριστά με ablation.» Επιστροφή στις διαφάνειες.</td></tr>
+</tbody></table>
+
+<div class="box good"><div class="t">Αν θέλεις ένα «wow» 5 δευτερολέπτων</div>
+Στο βήμα 1 πάτησε «Εκτέλεση πράκτορα» στην πλευρική μπάρα (ανοιχτή για λίγο): ο κύκλος BDI ξανατρέχει σε 2–10 δευτερόλεπτα και οι
+δείκτες ανανεώνονται. «Αυτό που στην εταιρεία παίρνει μια εβδομάδα planner-ώρες, εδώ έγινε τώρα.» Δοκίμασέ το πρώτα.</div>
+
+<h3>4.3 Σχέδιο Β</h3>
+<ul>
+  <li>Βάλε στις διαφάνειες τα screenshots αυτού του οδηγού (φάκελος <code>docs/guide_src/img/</code>, ή τράβα δικά σου με τα πραγματικά δεδομένα). Αν πέσει το laptop/ο προβολέας, η παρουσίαση συνεχίζει ίδια.</li>
+  <li>Έχε τα CSV ανοιχτά σε Excel σε δεύτερη καρτέλα — απαντούν σε «πόσο ακριβώς;».</li>
+  <li>Μην τρέξεις ζωντανά bootstrap/ablation (1–15 λεπτά) — μόνο τα αποτελέσματα.</li>
+  <li>Ο Copilot: μόνο αν το Ollama τρέχει και έχεις δοκιμάσει την ερώτηση την ίδια μέρα. Αλλιώς δείξε το screenshot της §3.6.</li>
+</ul>
+
+<!-- ============================================================ 5 -->
+<h2 class="pb">5. Τα οφέλη για την εταιρεία — πώς να τα παρουσιάσεις</h2>
+
+<p>Η επιτροπή του MBA κρίνει τη «συνεισφορά στο αντικείμενο» και την «ανάλυση αποτελεσμάτων». Δώσε πρώτα τα <b>ποσοτικά</b> οφέλη
+με τη σωστή βάση, μετά τα <b>ποιοτικά</b>, και κλείσε με μία <b>συντηρητική</b> εκτίμηση απόδοσης. Ο τρόπος που λες έναν αριθμό
+μετράει όσο ο αριθμός.</p>
+
+<h3>5.1 Ποσοτικά οφέλη — πού βρίσκεις κάθε νούμερο</h3>
+<table>
+<thead><tr><th style="width:26%">Όφελος</th><th style="width:34%">Πού το διαβάζεις (τελική εκτέλεση)</th><th>Πώς το λες</th></tr></thead>
+<tbody>
+<tr><td>Μείωση συνολικού κόστους αποθεμάτων (TCO) στο παράθυρο</td><td><code>validation_report.csv</code> → <code>total_cost_of_ownership</code> (as_is, to_be, delta_pct)</td><td>«Στις 60 ημέρες του backtest το TCO μειώθηκε κατά Χ% (€Α → €Β).»</td></tr>
+<tr><td>Ετήσιο ισοδύναμο εξοικονόμησης</td><td>ίδιο αρχείο → <code>tco_annualized_eur</code> (delta_abs)</td><td>«Γραμμική αναγωγή σε έτος: ≈ €Χ, ενδεικτική, με τις επιφυλάξεις της §5.5.» Ποτέ μην πολλαπλασιάσεις ξανά με 365/60.</td></tr>
+<tr><td>Λιγότερο δεσμευμένο κεφάλαιο</td><td><code>avg_inventory_eur</code> (delta_pct) και <code>capital_cost_eur</code></td><td>«Το μέσο απόθεμα μειώθηκε Χ% — δηλαδή €Υ λιγότερο δεσμευμένο κεφάλαιο, χωρίς να χειροτερέψει η εξυπηρέτηση.»</td></tr>
+<tr><td>Καλύτερη εξυπηρέτηση</td><td><code>cycle_service_level_pct</code>, <code>stockout_days</code>, <code>stockout_cost_eur</code></td><td>«Οι ημέρες έλλειψης μειώθηκαν Χ% και το κόστος ελλείψεων (χαμένο περιθώριο + επείγουσες προμήθειες) Υ%.»</td></tr>
+<tr><td>Πού πάει η αξία</td><td><code>validation_report_abc.csv</code></td><td>«Το Χ% της εξοικονόμησης προέρχεται από τα A-items — Pareto: εκεί εστιάζουμε την πιλοτική εφαρμογή.»</td></tr>
+<tr><td>Στιβαρότητα σε παραδοχές</td><td><code>validation_report_all_scenarios.csv</code>, <code>validation_report_sensitivity.csv</code></td><td>«Θετική εξοικονόμηση και στα τρία κοστολογικά σενάρια και σε όλες τις διαταράξεις ±20%.»</td></tr>
+<tr><td>Στατιστική βεβαιότητα</td><td><code>bootstrap_report_summary.csv</code> (mean_ci_lower/upper, n_positive, p-values)</td><td>«30 τυχαία παράθυρα: μέση εξοικονόμηση €Χ ανά 21 ημέρες, 95% CI [€Α, €Β], Ν/30 θετικά, p &lt; 0,001.»</td></tr>
+<tr><td>Ταχύτητα</td><td>κονσόλα <code>run_agent.py</code></td><td>«Πλήρης κύκλος για όλα τα υλικά σε δευτερόλεπτα — μπορεί να τρέχει κάθε πρωί.»</td></tr>
+</tbody></table>
+
+<div class="box warn"><div class="t">Ο σωστός τρόπος να μιλήσεις για το ετήσιο όφελος</div>
+Τα κόστη του backtest είναι <b>για το παράθυρο</b>. Το ετήσιο ισοδύναμο = κόστος παραθύρου × 365/ημέρες. Στα συνθετικά δεδομένα:
+εξοικονόμηση €35.163 στις 60 ημέρες → ≈ €214 χιλ./έτος· από τα παράθυρα 21 ημερών: €3.073 → ≈ €53 χιλ./έτος. Οι δύο αναγωγές
+διαφέρουν επειδή σε μικρό παράθυρο ο πράκτορας «κληρονομεί» το υπεραπόθεμα του As-Is και δεν προλαβαίνει να το μειώσει — πες το
+ως περιορισμό (§5.5), όχι ως αντίφαση. Για ένα καθαρό ετήσιο νούμερο τρέξε <code>run_validation.py --window-days 180</code> (ή 365 αν έχεις ιστορικό).</div>
+
+<h3>5.2 Ποιοτικά οφέλη (αυτά που ένας manager θα θυμάται)</h3>
+<ol>
+  <li><b>Συνέπεια αντί για ad hoc αποφάσεις.</b> Η ίδια πολιτική εφαρμόζεται σε όλα τα υλικά κάθε εβδομάδα — «ένας ακούραστος planner». Οι χειροκίνητες παρεμβάσεις της §1.2 μειώνονται σε εξαιρέσεις.</li>
+  <li><b>Χρόνος του planner.</b> Από «ελέγχω 1.500 κωδικούς» σε «εγκρίνω 100 προτάσεις και κοιτάζω 5 επείγουσες». Ο πράκτορας κάνει τη ρουτίνα, ο άνθρωπος τις εξαιρέσεις.</li>
+  <li><b>Εξηγησιμότητα και ελεγξιμότητα.</b> Κάθε πρόταση έχει αιτιολόγηση (πρόβλεψη, MRP, πολιτική, κανόνες). Αυτό λείπει από τα «μαύρα κουτιά» ML και είναι απαίτηση του EU AI Act για υποστήριξη αποφάσεων.</li>
+  <li><b>Διακυβέρνηση.</b> Ο πράκτορας προτείνει, ο άνθρωπος αποφασίζει (human-in-the-loop). Οι κανόνες είναι ορατοί, με προτεραιότητα, και αλλάζουν χωρίς κώδικα-μαύρο-κουτί.</li>
+  <li><b>Μηδενική διατάραξη του SAP.</b> Read-only ABAP extractor, καμία αλλαγή στο productive σύστημα, καμία άδεια «Digital Access». Λειτουργεί δίπλα στο SAP, όχι μέσα του.</li>
+  <li><b>Εμπιστευτικότητα.</b> Ψευδωνυμοποίηση, τοπική βάση, τοπικό LLM: τίποτα δεν φεύγει από την εταιρεία.</li>
+  <li><b>Προσαρμοστικότητα.</b> Οι κανόνες και οι πολιτικές lot sizing ρυθμίζονται ανά εταιρεία/business model — το κύριο σημείο διαφοροποίησης έναντι του στατικού SAP MRP. Το playbook έξι βημάτων για νέα εταιρεία (σύνοψη προς επιβλέποντα) το τεκμηριώνει.</li>
+  <li><b>Χαμηλό κόστος υιοθέτησης.</b> Open-source stack (Python, SQLite, Streamlit, Ollama), τρέχει σε laptop, εγκατάσταση σε λεπτά, πλήρης τεκμηρίωση αναπαραγωγής.</li>
+</ol>
+
+<h3>5.3 Πλαίσιο απόδοσης επένδυσης (συντηρητικά)</h3>
+<p>Χρησιμοποίησε το σχήμα της ΔΕ (§5) αλλά με τα νέα ποσά:</p>
+<pre>ετήσια εξοικονόμηση (ενδεικτική) = tco_annualized_eur(As-Is) − tco_annualized_eur(To-Be)
+                                   <span class="c">← validation_report.csv</span>
+συντηρητικό σενάριο              = ¼ της παραπάνω <span class="c">(αντίδραση προμηθευτών, μερική αποδοχή)</span>
+κόστος εφαρμογής                 = €30–50 χιλ. <span class="c">(ολοκλήρωση, εκπαίδευση, 6 μήνες υποστήριξη)</span>
+payback (μήνες)                  = κόστος εφαρμογής / (συντηρητική ετήσια εξοικονόμηση / 12)</pre>
+<p class="small">Παράδειγμα με τα συνθετικά δεδομένα: €214 χιλ./έτος → συντηρητικά ≈ €53 χιλ./έτος → payback 7–11 μήνες με κόστος €30–50 χιλ.
+Σε πραγματική εταιρεία 1.500 υλικών τα ποσά κλιμακώνονται με την αξία των αποθεμάτων — γι’ αυτό το επιχείρημα «πιλοτική εφαρμογή στα A-items πρώτα» είναι ισχυρό.</p>
+
+<h3>5.4 Μία πρόταση-κλειδί για το κλείσιμο</h3>
+<div class="say">«Ο πράκτορας δεν αντικαθιστά το SAP ούτε τον planner. Παίρνει τα δεδομένα που το SAP ήδη έχει, εφαρμόζει συστηματικά τη θεωρία
+αποθεμάτων που ο planner δεν προλαβαίνει να εφαρμόσει σε 1.500 κωδικούς, εξηγεί κάθε πρόταση, και — στο backtest — μειώνει το
+συνολικό κόστος αποθεμάτων κατά Χ% με ταυτόχρονη βελτίωση της εξυπηρέτησης, με στατιστικά σημαντικό αποτέλεσμα σε 30 τυχαία παράθυρα.»</div>
+
+<!-- ============================================================ 6 -->
+<h2 class="pb">6. Ερωτήσεις της επιτροπής και προτεινόμενες απαντήσεις</h2>
+
+<p>Σειρά κατά πιθανότητα. Οι δύσκολες είναι σημειωμένες. Απάντα σύντομα, με το dashboard ή έναν πίνακα ανοιχτό όπου χρειάζεται.</p>
+
+<h4>1. «Πώς ξέρετε ότι η εξοικονόμηση δεν οφείλεται σε ευνοϊκή περίοδο;»</h4>
+<p>Δύο στάδια (§3.6.3): 30 τυχαία παράθυρα 21 ημερών από όλο το ιστορικό (block subsampling) και bootstrap του μέσου με 2.000
+επαναδειγματοληψίες. Το 95% CI του μέσου δεν περιλαμβάνει το μηδέν, ο t-test και ο ακριβής έλεγχος προσήμου συμφωνούν
+(p &lt; 0,001), Ν/30 παράθυρα θετικά. Δείξε το ιστόγραμμα. Πρόσθεσε: «τα παράθυρα επικαλύπτονται μερικώς — γι’ αυτό
+αναφέρω και τον έλεγχο προσήμου που δεν εξαρτάται από κατανομή» (§5.5.1).</p>
+
+<h4>2. «Είναι δίκαιη η σύγκριση As-Is / To-Be;» <span class="tag warn">δύσκολη</span></h4>
+<p>Ίδιο αρχικό απόθεμα (ανακατασκευή από snapshot και κινήσεις), ίδιες παραγγελίες σε εξέλιξη κατά την έναρξη (κληρονομούνται
+και στο To-Be), ίδια πραγματική ζήτηση, ίδια δυναμική αποθέματος (χωρίς αρνητικό απόθεμα και στα δύο), ίδιο μοντέλο κόστους.
+Ο πράκτορας σε κάθε αναθεώρηση βλέπει μόνο κινήσεις ≤ t. Περιορισμός που δηλώνω: το As-Is δεν «αντιδρά» — είναι καταγραφή,
+όχι μοντέλο του planner· και η μη ικανοποιηθείσα ζήτηση δεν καταγράφεται στο SAP, άρα το κόστος ελλείψεων του As-Is είναι συντηρητικό.</p>
+
+<h4>3. «Το €Χ είναι για 60 ημέρες ή για έτος;»</h4>
+<p>Για τις 60 ημέρες του παραθύρου — όλα τα κόστη είναι στην ίδια βάση (διακράτηση × 60/365, ελλείψεις και παραγγελίες εντός παραθύρου).
+Το ετήσιο ισοδύναμο είναι γραμμική αναγωγή και το αναφέρω ως ενδεικτικό. (Μην αφήσεις κανένα νούμερο της ΔΕ να αντιφάσκει σε αυτό — §7.)</p>
+
+<h4>4. «Γιατί ο πράκτορας κάνει περισσότερες παραγγελίες;»</h4>
+<p>Επειδή βελτιστοποιεί το άθροισμα διακράτησης και παραγγελιών (EOQ/POQ/W-W): για ακριβά υλικά ο οικονομικός κύκλος είναι λίγες ημέρες,
+για φθηνά μήνες. Ο planner παρήγγελνε μεγάλες παρτίδες «για σιγουριά». Το κόστος παραγγελιών (€50/παραγγελία) είναι μέσα στο TCO —
+η εξοικονόμηση είναι <b>μετά</b> από αυτό. Αν η εταιρεία έχει ακριβότερη διαδικασία παραγγελίας, αλλάζει μία παράμετρος (<code>DEFAULT_ORDERING_COST</code>) και ο πράκτορας παραγγέλνει αραιότερα.</p>
+
+<h4>5. «Πώς διαφέρει από το MRP του SAP;»</h4>
+<p>Το SAP MRP εφαρμόζει στατικές παραμέτρους (EISBE, DISLS) που κάποιος πρέπει να συντηρεί. Ο πράκτορας: (α) υπολογίζει δυναμικά safety stock
+(z·σ·√LT) και πολιτική lot sizing από τη μεταβλητότητα, (β) εφαρμόζει επιχειρησιακούς κανόνες με προτεραιότητα (buffers, dead stock, ημερολόγιο,
+επείγον), (γ) εξηγεί κάθε πρόταση, (δ) αυτοαξιολογείται (backtest, bootstrap, ablation). Δεν αντικαθιστά το SAP· τρέχει δίπλα του, read-only.</p>
+
+<h4>6. «Γιατί BDI και όχι απλώς ένα script;»</h4>
+<p>Η BDI δίνει διαχωρισμό αντίληψης (beliefs), στόχων (desires) και δεσμεύσεων (intentions): μπορούμε να αλλάξουμε την πηγή δεδομένων
+(offline → live API) ή τους στόχους (service level 95% αντί 98%) χωρίς να αγγίξουμε τη λογική. Και κάθε πρόταση είναι intention με αιτιολόγηση —
+η εξηγησιμότητα είναι δομική, όχι πρόσθετη. Ο κύκλος perceive → deliberate → act είναι ο κώδικας του <code>src/agent/</code>.</p>
+
+<h4>7. «Γιατί απλές μέθοδοι πρόβλεψης και όχι machine learning;»</h4>
+<p>Με 12–18 μήνες ιστορικό ανά υλικό και διακοπτόμενη ζήτηση, τα νευρωνικά υπερπροσαρμόζουν και δεν εξηγούνται. Εδώ οι τρεις μέθοδοι
+αξιολογούνται ανά υλικό με walk-forward validation και ο πράκτορας διαλέγει· το safety stock απορροφά την υπόλοιπη αβεβαιότητα. Το ML είναι
+drop-in επέκταση (ίδια διεπαφή <code>forecast()</code>) — μελλοντική εργασία.</p>
+
+<h4>8. «Γιατί τέσσερις κανόνες δείχνουν μηδενική επίδραση στο ablation;»</h4>
+<p>Δύο είναι ενημερωτικοί (R-EXPEDITE σημαίνει, R-COST-ESTIMATE κοστολογεί) — αλλάζουν τι βλέπει ο planner, όχι ποσότητες, άρα δεν μπορούν
+να κινήσουν KPI. Δύο είναι δίχτυα ασφαλείας που δεν ενεργοποιήθηκαν στο παράθυρο (R-DEAD-STOCK: κανένα υλικό &gt;365 ημέρες· R-MOQ-ENFORCE:
+το MOQ εφαρμόζεται ήδη στο lot sizing — άμυνα σε βάθος). Είναι το «μετασχηματιστικοί vs ενημερωτικοί» της §4.7.2.</p>
+
+<h4>9. «Οι buffer κανόνες αυξάνουν το κόστος στο ablation — γιατί τους κρατάτε;» <span class="tag warn">δύσκολη</span></h4>
+<p>Επειδή η προσομοίωση έχει <b>ντετερμινιστικά lead times</b> και γνωστή ζήτηση εκ των υστέρων: ένα buffer που προστατεύει από καθυστερήσεις
+προμηθευτή δεν μπορεί να «πληρωθεί» σε ένα backtest όπου κανείς προμηθευτής δεν καθυστερεί. Το ablation μετρά το κόστος της ασφάλισης, όχι το
+όφελος. Η ευαισθησία με lead time +20% δείχνει ότι η εξοικονόμηση διατηρείται. Το δηλώνω ως περιορισμό και προτείνω στοχαστικά lead times
+ως μελλοντική εργασία — και ως πρακτική σύσταση, τα ποσοστά των buffers να βαθμονομηθούν ανά εταιρεία (το δίλημμα κόστους/ανθεκτικότητας της §5.7.2).</p>
+
+<h4>10. «Τα δεδομένα είναι πραγματικά;» <span class="tag crit">απάντησε ακριβώς ό,τι ισχύει</span></h4>
+<p>Πες ακριβώς με ποιο dataset παρήχθησαν οι πίνακες της ΔΕ και η επίδειξη: ανωνυμοποιημένη εξαγωγή SAP της εταιρείας (πόσα υλικά, πόσοι μήνες,
+ποια συναίνεση) ή/και το συνθετικό dataset του γεννήτορα (150 υλικά, seed 42, προσομοιωμένος planner). Αν χρησιμοποιείς και τα δύο, πες ποιο για τι.
+Η συνέπεια κειμένου–κώδικα–επίδειξης είναι το πιο εύκολο πράγμα να ελεγχθεί από έναν εξεταστή που θα τρέξει τον κώδικα.</p>
+
+<h4>11. «Πόσο γενικεύεται σε άλλη εταιρεία;»</h4>
+<p>Ο πυρήνας (BDI, MRP, κανόνες) δεν έχει λογική κλάδου. Για νέα εταιρεία: εξαγωγή με το ίδιο ABAP, ανωνυμοποίηση, smart defaults αν λείπει master data,
+βαθμόνομηση κανόνων/σεναρίου κόστους, backtest στο δικό της ιστορικό, πιλοτική εφαρμογή στα A-items — το playbook έξι βημάτων. Περιορισμός: μία μελέτη περίπτωσης (§5.5).</p>
+
+<h4>12. «Τι κερδίζει η εταιρεία από τον Copilot;»</h4>
+<p>Πρόσβαση του planner στην αιτιολόγηση με φυσική γλώσσα («γιατί 500 τεμάχια;»), χωρίς να μάθει το εργαλείο· τοπικό LLM άρα μηδενική διαρροή
+δεδομένων· read-only εργαλεία άρα δεν μπορεί να «κάνει ζημιά». Αξιολογήθηκε ποιοτικά (n = 2 planners) — formative, όχι στατιστική.</p>
+
+<h4>13. «Τι θα χρειαζόταν για παραγωγική χρήση;»</h4>
+<p>Σύνδεση live (OData/RFC) αντί για CSV, αυτόματη έκδοση ME21N με έγκριση, στοχαστικά lead times στην αξιολόγηση, πιλοτική εφαρμογή 3 μηνών με A/B
+σύγκριση planners, και βαθμονόμηση των παραμέτρων κόστους από τη λογιστική της εταιρείας.</p>
+
+<h4>14. «Πώς εξασφαλίζετε ότι δεν υπάρχει look-ahead bias;»</h4>
+<p>Φίλτρο στο επίπεδο δεδομένων: σε κάθε αναθεώρηση t το <code>Repository</code> επιστρέφει μόνο κινήσεις με ημερομηνία ≤ t και το απόθεμα της προσομοίωσης·
+η μελλοντική ζήτηση χρησιμοποιείται μόνο για να «καταναλώσει» απόθεμα και να μετρήσει KPI. Το master data (safety stock, lead time) είναι στατικό
+για όλο το παράθυρο — το δηλώνω ως απλοποίηση.</p>
+
+<h4>15. «Γιατί walk-forward σε εβδομαδιαίο επίπεδο;»</h4>
+<p>Γιατί έτσι καταναλώνει την πρόβλεψη το MRP (άθροισμα ημερών μέχρι την επόμενη παραλαβή) και γιατί το MAPE σε ημερήσια διακοπτόμενη ζήτηση
+απλώς μετρά πόσες μέρες είχαν μηδέν. Χρησιμοποιώ WMAPE (Syntetos &amp; Boylan). Η ημερήσια αξιολόγηση είναι διαθέσιμη με ένα κλικ.</p>
+
+<h4>16. «Πόσο κράτησε η υλοποίηση και τι ρόλο έπαιξε το AI;»</h4>
+<p>Απάντησε σύμφωνα με τη Δήλωση Χρήσης Generative AI (Παράρτημα Ε) και το Σεμινάριο (διαφ. 41–43): ποια εργαλεία, για τι (scaffolding, τεκμηρίωση,
+έλεγχος κώδικα), και ότι ο συγγραφέας είναι υπεύθυνος για κάθε γραμμή και κάθε αριθμό. Ο ίδιος ο έλεγχος που περιγράφει αυτός ο οδηγός
+(εντοπισμός και διόρθωση 16 σφαλμάτων με tests) είναι καλό παράδειγμα «επικύρωσης από τον συγγραφέα» — αν το αναφέρεις, πες το με ακρίβεια.</p>
+
+<!-- ============================================================ 7 -->
+<h2 class="pb">7. Τι πρέπει να ενημερωθεί στο κείμενο της ΔΕ πριν την παράδοση</h2>
+
+<p>Αφορά το <code>Diplomatiki_Ergasia_Drakos_Georgios_v2.docx</code>. Ο πίνακας συμπληρώνει τα 15 κίτρινα σημεία του
+README_Παράδοσης — τα σημεία 5, 6, 7, 13, 15 απαντώνται εδώ οριστικά.</p>
+
+<table>
+<thead><tr><th style="width:15%">Σημείο ΔΕ</th><th style="width:40%">Τι ισχύει τώρα</th><th>Τι κάνεις</th></tr></thead>
+<tbody>
+<tr><td>§3.6.1, §4.1, §4.5.1 (βάση κόστους)</td><td>Το κείμενο («κόστη για τη διάρκεια του παραθύρου») είναι σωστό — ο <b>κώδικας</b> το κάνει τώρα πραγματικά. Το README_Παράδοσης σημείο 15 απαντάται: τα παλιά ποσά ήταν ετησιοποιημένα.</td><td>Κράτα το κείμενο. Αντικατάστησε όλα τα ποσά με τη νέα εκτέλεση. Πρόσθεσε μία πρόταση: «Το κόστος διακράτησης = μέση αξία αποθέματος × ετήσιο ποσοστό × ημέρες/365».</td></tr>
+<tr><td>Πίνακας 4.6</td><td>Ο κώδικας παράγει πλέον όλες τις γραμμές, <b>και το ordering cost</b> (n_orders × €50) που υπήρχε στον πίνακα χωρίς πηγή.</td><td>Συμπλήρωσε από <code>validation_report.csv</code>: cycle_service_level_pct, fill_rate_pct, stockout_days, holding_cost_eur, stockout_cost_eur, ordering_cost_eur, total_cost_of_ownership.</td></tr>
+<tr><td>Πίνακας 4.7 (σενάρια)</td><td>Μονοτονική σχέση επιβεβαιώνεται στα συνθετικά (14,3% → 19,5% → 24,2%). Σημείο 7 του README.</td><td>Από <code>validation_report_all_scenarios.csv</code>· έλεγξε τη μονοτονικότητα με τα δικά σου δεδομένα.</td></tr>
+<tr><td>Πίνακας 4.8 (ABC)</td><td>Νέο αρχείο με TCO ανά κλάση και % εξοικονόμησης.</td><td>Από <code>validation_report_abc.csv</code>. Αν μια κλάση βγει αρνητική (στα συνθετικά η C: −8%, επειδή ο planner ήδη παρήγγελνε φθηνά υλικά σε μεγάλες παρτίδες), γράψ’ το και εξήγησέ το — είναι εύρημα, όχι σφάλμα.</td></tr>
+<tr><td>Πίνακας 4.9 (bootstrap)</td><td>Όλες οι γραμμές παράγονται: μέσος, διάμεσος, min/max, SD, SE, t-CI, <b>percentile-bootstrap CI (B = 2.000)</b>, p-values (bootstrap, t, sign), ετήσιο ισοδύναμο. Σημείο 5 του README.</td><td>Από την κονσόλα του <code>run_bootstrap.py</code> ή <code>bootstrap_report_summary.csv</code> (mean_ci_lower/upper, t_ci_lower/upper, t_statistic, t_p_value, sign_test_p_value, n_positive). Το «×365/21» είναι πλέον έγκυρο ως αναγωγή — αλλά με το νέο ποσό.</td></tr>
+<tr><td>§4.6.2 / Σχήμα 4.2 / Παρ. Γ</td><td>Ιστόγραμμα και 30 τιμές από <code>bootstrap_report.csv</code> (στήλες window, window_start, window_end, asis_tco, tobe_tco, savings).</td><td>Ξανακάνε το Σχήμα 4.2 (το dashboard το δείχνει — screenshot) και τον Πίνακα Γ.1. Το αρχείο λέγεται <code>bootstrap_report.csv</code> (όχι bootstrap_windows.csv).</td></tr>
+<tr><td>Πίνακας 4.10 (ablation, stress)</td><td>Baseline stress ≠ To-Be κανονικό (σημείο 6 του README λύθηκε — ίδιος προσομοιωτής, διαφορετικό αρχικό απόθεμα 0,5×SS).</td><td>Από <code>ablation_report.csv</code>. Πρόσθεσε στην §4.7.2 την παρατήρηση για τα ντετερμινιστικά lead times (ερώτηση 9 της §6) και στην §5.5 ως περιορισμό.</td></tr>
+<tr><td>Πίνακας 4.11 (ευαισθησία)</td><td>Νέα στήλη tco_savings_pct· όλες οι διαταράξεις θετικές στα συνθετικά.</td><td>Από <code>validation_report_sensitivity.csv</code>. Έλεγξε ότι holding +20% δεν υπερβαίνει το aggressive (σημείο 7).</td></tr>
+<tr><td>Πίνακες 4.12–4.13 (forecast)</td><td>Η ακρίβεια πλέον εκτιμάται σε εβδομαδιαίο επίπεδο με WMAPE (και MAPE διαθέσιμο).</td><td>Δήλωσε τη μετρική και το επίπεδο συνάθροισης· παράθεσε Syntetos &amp; Boylan (2005) για το WMAPE σε διακοπτόμενη ζήτηση. Αν οι πίνακες αναφέρουν «MAPE ημερήσιο», ξανατρέξε ανά κλάση από το dashboard ή ένα μικρό script.</td></tr>
+<tr><td>Πίνακας 4.1</td><td>Νέα μεγέθη: ~12.600 γραμμές Python + 570 ABAP, <b>192</b> unit tests, 5 πολιτικές lot sizing (πλέον πραγματικά όλες), 7 κανόνες, 6 tabs, 7 εργαλεία Copilot.</td><td>Ενημέρωσε τις τιμές (και στη Σύνοψη/Abstract: «183 unit tests» → 192).</td></tr>
+<tr><td>§4.2.2 (δείγμα log)</td><td>Το τρέχον απόσπασμα (1.547 υλικά, 23.856 κινήσεις, 142 POs, 586 προτάσεις, 89 urgent) περιέχει αριθμούς του παλιού συνθετικού dataset και του παλιού σφάλματος (όλα expedite).</td><td>Αντικατάστησέ το με το πραγματικό output του <code>run_agent.py</code> από το dataset της ΔΕ. Προσοχή: 586 = παλιό bug.</td></tr>
+<tr><td>§4.6, §4.11, §5.1, §5.8, Σύνοψη, Abstract</td><td>Το «ετήσιο ισοδύναμο ≈ €1,1 εκ.» και το ROI (§5) βασίζονται σε διπλή ετησιοποίηση.</td><td>Ξαναγράψε με το tco_annualized_eur της νέας εκτέλεσης (και το συντηρητικό ¼). Το payback ξαναϋπολογίζεται (§5.3 εδώ).</td></tr>
+<tr><td>§3.5 / §4.5 (πηγή δεδομένων)</td><td>Οι υπάρχοντες αριθμοί (€586.722/€403.837, 586 προτάσεις, 142 POs) ταυτίζονται με το παλιό συνθετικό dataset.</td><td>Γράψε ρητά ποιο dataset παρήγαγε κάθε πίνακα. Αν είναι συνθετικό, περίγραψέ το ως «συνθετικό dataset βαθμονομημένο στα χαρακτηριστικά της εταιρείας» και μετακίνησε τους ισχυρισμούς «1.547 υλικά» στην περιγραφή της εταιρείας, όχι των αποτελεσμάτων. Η επιτροπή μπορεί να τρέξει <code>run_all.bat</code> και να συγκρίνει.</td></tr>
+<tr><td>§5.5 (περιορισμοί)</td><td>Δύο νέοι περιορισμοί προέκυψαν από τον έλεγχο.</td><td>Πρόσθεσε: (α) ντετερμινιστικά lead times στην προσομοίωση → τα buffers δεν μπορούν να αποδώσουν όφελος στο backtest· (β) η μη ικανοποιηθείσα ζήτηση δεν καταγράφεται στο MB51 → κόστος ελλείψεων As-Is συντηρητικό.</td></tr>
+<tr><td>Παράρτημα Δ</td><td>Το PDF ξαναπαράχθηκε με τις αλλαγές (MRP lead-time-aware, βάση κόστους, δισταδιακό bootstrap).</td><td>Αντικατάστησε το αρχείο (<code>docs/parartima_d_technical_guide.pdf</code>).</td></tr>
+<tr><td>Παράρτημα ΣΤ</td><td>Νέες εντολές (<code>run_all.bat</code>), σταθερό snapshot, 192 tests, χρόνοι εκτέλεσης.</td><td>Αντέγραψε από <code>docs/REPRODUCIBILITY.md</code>· βάλε commit hash του merge στο main και ημερομηνία πρόσβασης· κάνε το repo public ή «κατόπιν αιτήματος» (σημείο 13).</td></tr>
+<tr><td>Πίνακας 3.3 (εκδόσεις)</td><td>Δοκιμάστηκε με Python 3.11, pandas 3.0, numpy 2.4, scipy 1.16, SQLAlchemy 2.0, Streamlit 1.64, Plotly 7.1.</td><td>Γράψε τις εκδόσεις του δικού σου μηχανήματος: <code>pip list</code>.</td></tr>
+</tbody></table>
+
+<div class="box"><div class="t">Σειρά εργασίας που προτείνω</div>
+(1) Τρέξε <code>run_all.bat</code> με το τελικό dataset και κράτα τα CSV σε φάκελο «ΔΕ_τελικά_αποτελέσματα». (2) Συμπλήρωσε τους πίνακες με τη σειρά 4.6 → 4.7 → 4.8 → 4.9 → 4.10 → 4.11.
+(3) Ξαναγράψε Σύνοψη/Abstract/§4.11/§5.1/§5.8 με τα νέα ποσά (μία φορά, με αναζήτηση των παλιών αριθμών: 190.945, 64.568, 58.468, 70.668, 1,1 εκ., 31,9). (4) Στείλε στον κ. Γκαγιαλή ένα σύντομο email:
+«έλεγξα τον κώδικα, διόρθωσα σφάλματα στη βάση κόστους και στο bootstrap, τα νούμερα ενημερώθηκαν — σύνοψη αλλαγών συνημμένη».</div>
+
+<!-- ============================================================ 8 -->
+<h2 class="pb">8. Λίστα ελέγχου για την ημέρα της εξέτασης</h2>
+
+<h3>Μία εβδομάδα πριν</h3>
+<ul>
+  <li>☐ Αποστολή διαφανειών <code>2027ΠΑΡ_ΔΡΑΚΟΣ ΓΕΩΡΓΙΟΣ.pdf</code> σε επιτροπή και γραμματεία (athensmba@aueb.gr, θέμα «ΠΑΡΟΥΣΙΑΣΗ ΔΕ_ΔΡΑΚΟΣ ΓΕΩΡΓΙΟΣ»).</li>
+  <li>☐ Οι διαφάνειες περιέχουν screenshots των τριών καρτελών της επίδειξης (σχέδιο Β).</li>
+  <li>☐ Δύο πρόβες με χρονόμετρο: ≤ 13 λεπτά ομιλία.</li>
+</ul>
+<h3>Την προηγούμενη μέρα</h3>
+<ul>
+  <li>☐ <code>git status</code> καθαρό στο branch που θα παρουσιάσεις, <code>pytest -q</code> → 192 passed.</li>
+  <li>☐ <code>run_all.bat</code> (ή <code>--keep-data</code>) ολοκληρώθηκε· τα 7 CSV υπάρχουν στον ριζικό φάκελο· ημερομηνία αναφοράς σωστή.</li>
+  <li>☐ Το dashboard ανοίγει, και οι 6 καρτέλες φορτώνουν χωρίς μηνύματα «Δεν βρέθηκε».</li>
+  <li>☐ Το κρίσιμο υλικό της «Ανάλυσης υλικού» είναι αυτό που θέλεις να δείξεις (σημείωσε τον κωδικό).</li>
+  <li>☐ Αν θα δείξεις Copilot: Ollama τρέχει, η ερώτηση δοκιμάστηκε, ο χρόνος απόκρισης είναι ανεκτός.</li>
+  <li>☐ Laptop φορτισμένο, φορτιστής, αντάπτορας HDMI, browser σε πλήρη οθόνη, notifications κλειστά, dark mode κλειστό.</li>
+</ul>
+<h3>15 λεπτά πριν</h3>
+<ul>
+  <li>☐ <code>start_dashboard.bat</code> → η Επισκόπηση ανοιχτή, πλευρική μπάρα κλειστή, zoom 110%.</li>
+  <li>☐ Excel με τα CSV σε δεύτερη καρτέλα· PDF της ΔΕ ανοιχτό στους Πίνακες 4.6–4.10.</li>
+  <li>☐ Αυτός ο οδηγός στη §6 (ερωτήσεις), εκτυπωμένος ή σε δεύτερη οθόνη.</li>
+</ul>
+
+<!-- ============================================================ APPENDICES -->
+<h2 class="pb">Παράρτημα Α — Εντολές (cheat sheet)</h2>
+<pre class="cheat"><span class="c"># Περιβάλλον</span>
+.venv\Scripts\activate
+pip install -r requirements.txt
+
+<span class="c"># Δεδομένα</span>
+python scripts\generate_sample_data.py             <span class="c"># συνθετικά (seed 42, snapshot 21.09.2026)</span>
+python scripts\generate_sample_data.py --snapshot-date today
+python -m src.data_layer.anonymization             <span class="c"># πραγματικά: data\raw → data\anonymized</span>
+python scripts\run_etl.py                          <span class="c"># CSV → SQLite (προτιμά anonymized)</span>
+
+<span class="c"># Πράκτορας</span>
+python scripts\run_agent.py                        <span class="c"># perceive → deliberate → act</span>
+python scripts\run_agent.py --method exponential_smoothing --horizon 90 --dry-run
+
+<span class="c"># Αξιολόγηση</span>
+python scripts\run_validation.py                   <span class="c"># 60 ημ. → validation_report.csv, _abc.csv</span>
+python scripts\run_validation.py --window-days 180 <span class="c"># μεγαλύτερο παράθυρο</span>
+python scripts\run_validation.py --all-scenarios   <span class="c"># → _all_scenarios.csv</span>
+python scripts\run_validation.py --sensitivity     <span class="c"># → _sensitivity.csv</span>
+python scripts\run_bootstrap.py                    <span class="c"># 30×21 ημ. → bootstrap_report*.csv</span>
+python scripts\run_bootstrap.py --n-samples 100 --window-size 30
+python scripts\run_rule_ablation.py --stress-test  <span class="c"># → ablation_report.csv</span>
+
+<span class="c"># Όλα μαζί / dashboard / tests / Παράρτημα Δ</span>
+run_all.bat            (ή run_all.bat --keep-data)
+start_dashboard.bat    (ή streamlit run dashboard\app.py)
+pytest -q
+python scripts\generate_parartima_d.py</pre>
+
+<h2>Παράρτημα Β — Αρχεία → Πίνακες της ΔΕ</h2>
+<table>
+<thead><tr><th>Αρχείο</th><th>Παράγεται από</th><th>Πίνακας / Σχήμα ΔΕ</th><th>Στήλες-κλειδιά</th></tr></thead>
+<tbody>
+<tr><td><code>validation_report.csv</code></td><td>run_validation.py</td><td>Πίν. 4.6</td><td>metric, as_is, to_be, delta_abs, delta_pct, direction (σειρές: cycle_service_level_pct, fill_rate_pct, stockout_days, holding_cost_eur, stockout_cost_eur, ordering_cost_eur, total_cost_of_ownership, tco_annualized_eur, period_days)</td></tr>
+<tr><td><code>validation_report_abc.csv</code></td><td>run_validation.py</td><td>Πίν. 4.8</td><td>abc_class, n_materials, asis_tco, tobe_tco, savings, savings_pct, asis_service, tobe_service</td></tr>
+<tr><td><code>validation_report_all_scenarios.csv</code></td><td>--all-scenarios</td><td>Πίν. 4.7</td><td>scenario (…_asis/_tobe), total_cost_of_ownership, tco_annualized_eur, cycle_service_level_pct</td></tr>
+<tr><td><code>validation_report_sensitivity.csv</code></td><td>--sensitivity</td><td>Πίν. 4.11</td><td>variation, asis_tco, tobe_tco, tco_savings, tco_savings_pct, asis_service, tobe_service</td></tr>
+<tr><td><code>bootstrap_report_summary.csv</code></td><td>run_bootstrap.py</td><td>Πίν. 4.9</td><td>point_estimate, median, std_dev, std_error, mean_ci_lower/upper (bootstrap B), t_ci_lower/upper, t_statistic, t_p_value, sign_test_p_value, n_positive, p_value, is_significant</td></tr>
+<tr><td><code>bootstrap_report.csv</code></td><td>run_bootstrap.py</td><td>Πίν. Γ.1, Σχ. 4.2</td><td>window, window_start, window_end, asis_tco, tobe_tco, savings, asis_service, tobe_service</td></tr>
+<tr><td><code>ablation_report.csv</code></td><td>run_rule_ablation.py --stress-test</td><td>Πίν. 4.10</td><td>disabled_rule, n_proposals, service_level_pct, Δ_service_pp, stockout_days, Δ_stockout_days, holding_cost_eur, Δ_holding, tco_eur, Δ_tco</td></tr>
+<tr><td>κονσόλα run_agent.py</td><td>run_agent.py</td><td>§4.2.2</td><td>Total proposals, Materials covered, Expedite alerts, Estimated cost</td></tr>
+</tbody></table>
+
+<h2>Παράρτημα Γ — Τι αλλάζει με τα πραγματικά δεδομένα</h2>
+<ul>
+  <li><b>Πλήθος και χρόνοι</b>: 1.500 υλικά ≈ 10× τα συνθετικά· ο πράκτορας τρέχει σε ~10–20 s, το backtest 60 ημερών ~2 λεπτά, το bootstrap ~15 λεπτά, το ablation ~10 λεπτά. Τρέξε τα από την προηγούμενη μέρα.</li>
+  <li><b>Master data</b>: αν τα MRP πεδία είναι κενά, το anonymization τα εμπλουτίζει (στήλες <code>lt_source</code>, <code>ss_source</code>, <code>moq_source</code>, <code>ls_source</code> στο materials.csv δείχνουν την προέλευση) — καλό επιχείρημα για την «προσαρμοστικότητα σε ελλιπή δεδομένα».</li>
+  <li><b>Πολιτικές lot sizing</b>: τα SAP DISLS (EX, FX, WB, MB, PK, WI…) αντιστοιχίζονται σωστά πλέον· «WB» = εβδομαδιαίο lot (POQ), όχι EOQ.</li>
+  <li><b>Πρόσημα κινήσεων</b>: 601 (παραδόσεις) μετρούν πλέον ως ανάλωση στα στατιστικά ζήτησης — για τελικά προϊόντα αλλάζει το safety stock και η κατάταξη ABC.</li>
+  <li><b>Αδρανές απόθεμα</b>: ο δείκτης «Αδρανές απόθεμα» μπορεί να αποκαλύψει σημαντική δεσμευμένη αξία — συχνά το πιο εντυπωσιακό νούμερο για έναν manager.</li>
+  <li><b>Αν το As-Is είναι καλύτερο από τον πράκτορα σε κάποιο KPI</b>: μην το κρύψεις. Εξήγησέ το (π.χ. ο planner γνωρίζει πληροφορίες που δεν είναι στο SAP) και δείξε την ανταλλαγή στο TCO. Η κριτική ανάλυση βαθμολογείται.</li>
+</ul>
+
+<p class="small" style="margin-top:14pt;color:var(--muted);page-break-before:avoid">Ο οδηγός παράγεται από το <code>docs/guide_src/build_guide.py</code>. Οι εικόνες είναι από το dashboard με τα συνθετικά δεδομένα (seed 42, snapshot 21.09.2026), branch presentation-ready.</p>
+
+</body>
+</html>

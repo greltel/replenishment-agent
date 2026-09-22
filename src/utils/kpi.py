@@ -12,7 +12,24 @@ Provides three layers of metric depth:
 Cost methodology follows Silver/Pyke/Peterson (1998) and Vollmann et al.
 (2005). Holding cost is decomposed into capital + warehouse + obsolescence
 + insurance + shrinkage. Stockout cost includes lost-sale loss + expedite
-premium.
+premium. Ordering cost = number of orders × fixed cost per order.
+
+COST BASIS — read this before quoting any € figure
+---------------------------------------------------
+All cost KPIs are expressed FOR THE SIMULATED WINDOW (e.g. 60 days), so
+that holding, stockout and ordering cost are on the same basis and can be
+added into a Total Cost of Ownership for that window:
+
+    holding_cost   = avg inventory value × annual holding rate × (days / 365)
+    stockout_cost  = lost sales + expedite premium incurred inside the window
+    ordering_cost  = n_orders × ordering cost per order
+    TCO            = holding + stockout + ordering
+
+The *annualised* equivalent of the same window is reported alongside
+(`*_annualized` fields, = window value × 365 / days). Quote the window
+figure when describing the backtest and the annualised figure when
+building a yearly business case — never multiply the annualised figure by
+365/days again.
 """
 from __future__ import annotations
 
@@ -26,6 +43,11 @@ from src.utils.cost_estimator import (
     HoldingCostComponents, StockoutCostParams, CostScenario,
     impute_costs_in_df,
 )
+
+# Fixed administrative cost per purchase order (€). Mirrors
+# config.default_ordering_cost / the MRP engine's EOQ setup cost, but kept
+# as a module constant so the KPI layer has no dependency on the env config.
+DEFAULT_ORDERING_COST = 50.0
 
 
 # ============================================================
@@ -51,8 +73,14 @@ class KPIReport:
     stockout_cost_eur:       float = 0.0
     lost_sales_eur:          float = 0.0
     expedite_premium_eur:    float = 0.0
+    ordering_cost_eur:       float = 0.0
     total_cost_of_ownership: float = 0.0
     days_of_cover_avg:       float = 0.0
+
+    # v3: explicit cost basis
+    period_days:             int   = 0      # length of the simulated window
+    holding_cost_annualized_eur:    float = 0.0
+    tco_annualized_eur:             float = 0.0
 
     # Per-class breakdown (optional)
     by_abc_class:            dict = field(default_factory=dict)
@@ -81,10 +109,16 @@ class KPICalculator:
       materials:      [material_id, standard_cost, material_type, abc_class]
 
     Args:
-        holding_rate: scalar (legacy mode) or HoldingCostComponents
+        holding_rate: scalar (legacy mode) or HoldingCostComponents — an
+            ANNUAL rate; it is pro-rated to the window length automatically.
         stockout_params: StockoutCostParams for cost-of-stockout calculation
         impute_missing_costs: if True, fill in missing standard_cost values
             from heuristics (material_type + abc_class)
+        ordering_cost_per_order: fixed administrative cost per purchase
+            order (€), used for the ordering-cost KPI
+        period_days: length of the simulated window in days. If omitted it
+            is inferred from the stock history date range (inclusive). Pass
+            it explicitly when the stock history is empty.
     """
 
     def __init__(
@@ -96,11 +130,14 @@ class KPICalculator:
         holding_rate: float | HoldingCostComponents = 0.20,
         stockout_params: Optional[StockoutCostParams] = None,
         impute_missing_costs: bool = True,
+        ordering_cost_per_order: float = DEFAULT_ORDERING_COST,
+        period_days: Optional[int] = None,
     ):
         self.stock = stock_history.copy()
         self.demand = demand_history.copy()
         self.orders = orders.copy()
         self.materials = materials.copy()
+        self.ordering_cost_per_order = float(ordering_cost_per_order)
 
         # Holding rate may be scalar or decomposed
         if isinstance(holding_rate, HoldingCostComponents):
@@ -123,6 +160,26 @@ class KPICalculator:
         for df in (self.stock, self.demand, self.orders):
             if "date" in df.columns:
                 df["date"] = pd.to_datetime(df["date"])
+
+        # Window length → pro-rating factor for the annual holding rate
+        self.period_days = int(period_days) if period_days else self._infer_period_days()
+
+    # ---------- Cost basis helpers ----------
+    def _infer_period_days(self) -> int:
+        """Inclusive number of days covered by the stock history."""
+        if self.stock.empty or "date" not in self.stock.columns:
+            return 0
+        span = (self.stock["date"].max() - self.stock["date"].min()).days + 1
+        return int(max(span, 1))
+
+    @property
+    def period_fraction(self) -> float:
+        """Fraction of a year covered by the window (1.0 if unknown)."""
+        return self.period_days / 365.0 if self.period_days > 0 else 1.0
+
+    def annualize(self, window_value: float) -> float:
+        """Scale a window-based cost to a 365-day equivalent."""
+        return window_value / self.period_fraction if self.period_fraction > 0 else 0.0
 
     # ---------- Service-level KPIs ----------
     def cycle_service_level(self) -> float:
@@ -156,31 +213,42 @@ class KPICalculator:
         joined = avg_per_material.to_frame("avg_qty").join(cost_map, how="inner")
         return float((joined["avg_qty"] * joined[self._cost_col]).sum())
 
-    def holding_cost(self) -> float:
-        """Σ (avg_inventory_value × holding_rate)."""
+    def holding_cost_annualized(self) -> float:
+        """avg_inventory_value × annual holding_rate (365-day equivalent)."""
         return self.avg_inventory_value() * self.holding_rate
 
+    def holding_cost(self) -> float:
+        """Holding cost incurred INSIDE the window:
+        avg_inventory_value × annual holding_rate × (period_days / 365)."""
+        return self.holding_cost_annualized() * self.period_fraction
+
     def holding_cost_decomposed(self) -> dict:
-        """Break holding cost into its components."""
-        avg_value = self.avg_inventory_value()
+        """Break the (window) holding cost into its components."""
+        base = self.avg_inventory_value() * self.period_fraction
         if self.holding_components is None:
             return {
-                "capital_cost":   avg_value * self.holding_rate * 0.5,
-                "warehouse":      avg_value * self.holding_rate * 0.2,
-                "obsolescence":   avg_value * self.holding_rate * 0.2,
-                "insurance":      avg_value * self.holding_rate * 0.05,
-                "shrinkage":      avg_value * self.holding_rate * 0.05,
-                "total":          avg_value * self.holding_rate,
+                "capital_cost":   base * self.holding_rate * 0.5,
+                "warehouse":      base * self.holding_rate * 0.2,
+                "obsolescence":   base * self.holding_rate * 0.2,
+                "insurance":      base * self.holding_rate * 0.05,
+                "shrinkage":      base * self.holding_rate * 0.05,
+                "total":          base * self.holding_rate,
             }
         c = self.holding_components
         return {
-            "capital_cost":   avg_value * c.capital_cost_rate,
-            "warehouse":      avg_value * c.warehouse_rate,
-            "obsolescence":   avg_value * c.obsolescence_rate,
-            "insurance":      avg_value * c.insurance_rate,
-            "shrinkage":      avg_value * c.shrinkage_rate,
-            "total":          avg_value * c.total_rate,
+            "capital_cost":   base * c.capital_cost_rate,
+            "warehouse":      base * c.warehouse_rate,
+            "obsolescence":   base * c.obsolescence_rate,
+            "insurance":      base * c.insurance_rate,
+            "shrinkage":      base * c.shrinkage_rate,
+            "total":          base * c.total_rate,
         }
+
+    def ordering_cost(self) -> float:
+        """n_orders × fixed cost per order (window basis)."""
+        if self.orders.empty:
+            return 0.0
+        return float(len(self.orders)) * self.ordering_cost_per_order
 
     def stockout_cost(self) -> dict:
         """Cost of stockouts: lost sales + expedite premium."""
@@ -220,8 +288,11 @@ class KPICalculator:
         }
 
     def total_cost_of_ownership(self) -> float:
-        """TCO = holding cost + stockout cost. Excludes acquisition cost."""
-        return self.holding_cost() + self.stockout_cost()["total"]
+        """TCO = holding + stockout + ordering cost (window basis).
+        Excludes acquisition cost (identical in As-Is and To-Be)."""
+        return (self.holding_cost()
+                + self.stockout_cost()["total"]
+                + self.ordering_cost())
 
     # ---------- Operational KPIs ----------
     def inventory_turns(self) -> float:
@@ -290,6 +361,8 @@ class KPICalculator:
                               else self.holding_rate),
                 stockout_params=self.stockout_params,
                 impute_missing_costs=False,
+                ordering_cost_per_order=self.ordering_cost_per_order,
+                period_days=self.period_days,
             )
             sub_calc._cost_col = self._cost_col
 
@@ -299,6 +372,8 @@ class KPICalculator:
                 "fill_rate":             round(sub_calc.fill_rate() * 100, 2),
                 "holding_cost":          round(sub_calc.holding_cost(), 2),
                 "stockout_cost":         round(sub_calc.stockout_cost()["total"], 2),
+                "ordering_cost":         round(sub_calc.ordering_cost(), 2),
+                "tco":                   round(sub_calc.total_cost_of_ownership(), 2),
                 "n_orders":              len(sub_orders),
                 "stockout_days":         sub_calc.stockout_days(),
             }
@@ -309,6 +384,7 @@ class KPICalculator:
     def report(self) -> KPIReport:
         decomp = self.holding_cost_decomposed()
         stockout = self.stockout_cost()
+        tco = self.total_cost_of_ownership()
         return KPIReport(
             cycle_service_level_pct=round(self.cycle_service_level() * 100, 2),
             fill_rate_pct=round(self.fill_rate() * 100, 2),
@@ -326,8 +402,12 @@ class KPICalculator:
             stockout_cost_eur=round(stockout["total"], 2),
             lost_sales_eur=round(stockout["lost_sales"], 2),
             expedite_premium_eur=round(stockout["expedite_premium"], 2),
-            total_cost_of_ownership=round(self.total_cost_of_ownership(), 2),
+            ordering_cost_eur=round(self.ordering_cost(), 2),
+            total_cost_of_ownership=round(tco, 2),
             days_of_cover_avg=round(self.avg_days_of_cover(), 2),
+            period_days=self.period_days,
+            holding_cost_annualized_eur=round(self.holding_cost_annualized(), 2),
+            tco_annualized_eur=round(self.annualize(tco), 2),
             by_abc_class=self.report_by_abc(),
         )
 
@@ -346,15 +426,19 @@ def compare_scenarios(
 
     higher_is_better = {
         "cycle_service_level_pct", "fill_rate_pct", "inventory_turns",
-        "n_orders",
     }
     lower_is_better = {
         "holding_cost_eur", "stockout_days", "stockout_cost_eur",
-        "lost_sales_eur", "expedite_premium_eur",
+        "lost_sales_eur", "expedite_premium_eur", "ordering_cost_eur",
         "capital_cost_eur", "warehouse_cost_eur",
         "obsolescence_cost_eur", "insurance_cost_eur",
         "total_cost_of_ownership", "avg_inventory_eur",
+        "holding_cost_annualized_eur", "tco_annualized_eur",
     }
+    # n_orders, avg_order_size, days_of_cover_avg and period_days are
+    # descriptive: more orders is neither good nor bad by itself (the
+    # trade-off is captured by ordering_cost_eur vs holding_cost_eur).
+    descriptive = {"period_days"}
 
     rows = []
     for key in asis_dict:
@@ -368,7 +452,11 @@ def compare_scenarios(
         delta_pct = (delta_abs / a * 100) if a not in (0, 0.0) else float("nan")
 
         direction = "neutral"
-        if key in higher_is_better:
+        if key in descriptive:
+            direction = "—"
+        elif delta_abs == 0:
+            direction = "= same"
+        elif key in higher_is_better:
             direction = "↑ better" if delta_abs > 0 else "↓ worse"
         elif key in lower_is_better:
             direction = "↓ better" if delta_abs < 0 else "↑ worse"
@@ -399,9 +487,9 @@ def sensitivity_pivot(
     if metrics is None:
         metrics = [
             "cycle_service_level_pct", "fill_rate_pct",
-            "holding_cost_eur", "stockout_cost_eur",
-            "total_cost_of_ownership", "stockout_days",
-            "inventory_turns", "n_orders",
+            "holding_cost_eur", "stockout_cost_eur", "ordering_cost_eur",
+            "total_cost_of_ownership", "tco_annualized_eur", "stockout_days",
+            "inventory_turns", "n_orders", "period_days",
         ]
 
     rows = []

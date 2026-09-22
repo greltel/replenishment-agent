@@ -11,6 +11,14 @@ from sqlalchemy.orm import declarative_base, relationship
 Base = declarative_base()
 
 
+# SAP movement types (BWART) that constitute DEMAND for replenishment
+# purposes: goods issues to production orders (261), cost centres (201) and
+# projects/networks (281). Used consistently by the perception module, the
+# backtest simulators and the copilot tools. Receipts (101) are never demand.
+CONSUMPTION_MOVEMENT_TYPES: tuple[str, ...] = ("261", "201", "281")
+GOODS_RECEIPT_MOVEMENT_TYPE = "101"
+
+
 def _utcnow() -> datetime:
     """Timezone-aware UTC now (replaces deprecated datetime.utcnow)."""
     return datetime.now(timezone.utc)

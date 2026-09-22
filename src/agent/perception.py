@@ -33,7 +33,7 @@ class PerceptionModule:
         as_of = as_of or get_effective_today()
         materials = self.repo.get_all_materials()
 
-        beliefs = AgentBeliefs()
+        beliefs = AgentBeliefs(as_of=as_of)
 
         for m in materials:
             mid = m.material_id
@@ -43,7 +43,7 @@ class PerceptionModule:
                 mid, days=history_days, as_of=as_of
             )
             beliefs.consumption_history[mid] = history
-            beliefs.annual_demand[mid] = annual_demand(history)
+            beliefs.annual_demand[mid] = annual_demand(history, as_of=as_of)
 
         log.info(
             f"Perception complete: {len(materials)} materials, "

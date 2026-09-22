@@ -544,13 +544,28 @@ def build_content(styles: dict) -> list:
         ["Στήλη", "Σημασία"],
         ["period",              "Ημερομηνία"],
         ["gross_requirement",   "Προβλεπόμενη ζήτηση εκείνη την ημέρα"],
-        ["scheduled_receipts",  "Open POs που φτάνουν εκείνη την ημέρα"],
-        ["projected_on_hand",   "Stock στο τέλος της ημέρας (πριν το receipt)"],
-        ["net_requirement",     "Έλλειμμα που πρέπει να καλυφθεί"],
-        ["planned_receipt",     "Προτεινόμενη ποσότητα παραλαβής"],
-        ["planned_release",     "Πότε πρέπει να γίνει η παραγγελία (planned_receipt − LT)"],
+        ["scheduled_receipt",   "Ανοιχτές παραγγελίες (POs) που φτάνουν εκείνη την ημέρα"],
+        ["planned_arrival_qty", "Προτεινόμενες παραγγελίες που φτάνουν εκείνη την ημέρα"],
+        ["projected_on_hand",   "Προβλεπόμενο απόθεμα στο τέλος της ημέρας"],
+        ["net_requirement",     "Έλλειμμα έναντι του safety stock που πρέπει να καλυφθεί"],
+        ["planned_receipt",     "Ποσότητα που αποφασίζεται εκείνη την ημέρα (μετά το lot sizing)"],
+        ["planned_release",     "Ημερομηνία έκδοσης παραγγελίας (άφιξη − lead time, όχι στο παρελθόν)"],
+        ["planned_arrival",     "Ημερομηνία άφιξης (= period, ή σήμερα + LT αν η ανάγκη είναι εντός LT)"],
+        ["below_safety",        "Σήμανση ημερών με απόθεμα κάτω από το safety stock"],
     ]
     story.append(make_table(mrp_cols, col_widths=[4.5*cm, 10.5*cm]))
+    story.append(P(
+        "<b>Επίγνωση lead time.</b> Ανάγκη που εμφανίζεται μέσα στο lead time δεν "
+        "μπορεί να καλυφθεί εγκαίρως: η νωρίτερη δυνατή άφιξη νέας παραγγελίας είναι "
+        "«σήμερα + LT». Το engine υπολογίζει το έλλειμμα που προβάλλεται σε εκείνη "
+        "την ημερομηνία (αφού συνυπολογίσει όλες τις ενδιάμεσες παραλαβές και "
+        "αναλώσεις), εκδίδει <b>μία</b> παραγγελία και την καταχωρεί στην ημερομηνία "
+        "άφιξης. Έτσι δεν παράγονται πολλαπλές παραγγελίες για το ίδιο έλλειμμα σε "
+        "διαδοχικές ημέρες ή διαδοχικές αναθεωρήσεις (rolling review) — η ίδια "
+        "παραδοχή που κάνει και το SAP MRP για παραλαβές που δεν προλαβαίνουν. Οι "
+        "ανοιχτές παραγγελίες με ημερομηνία στο παρελθόν θεωρούνται διαθέσιμες "
+        "σήμερα (rescheduling exception).", styles["body"]
+    ))
 
     story.append(P("4.2 Lot Sizing Πολιτικές", styles["h2"]))
     story.append(P(
@@ -559,10 +574,10 @@ def build_content(styles: dict) -> list:
     lot_table = [
         ["Κωδικός", "Όνομα", "Χρήση"],
         ["LFL", "Lot-for-Lot",                "Παραγγέλνουμε ακριβώς όσο χρειάζεται. Zero holding."],
-        ["FOQ", "Fixed Order Quantity",       "Πάντα ίδια ποσότητα (από MARC.BSTRF)."],
-        ["EOQ", "Economic Order Quantity",    "Wilson formula. Βελτιστοποιεί holding vs ordering cost."],
-        ["POQ", "Periodic Order Quantity",    "Παραγγελία κάθε N περιόδους."],
-        ["WW",  "Wagner-Whitin",              "Dynamic programming. Βρίσκει τον global optimum σε πεπερασμένο horizon."],
+        ["FOQ", "Fixed Order Quantity",       "Πολλαπλάσια σταθερής ποσότητας (MARC.BSTRF), τουλάχιστον MOQ."],
+        ["EOQ", "Economic Order Quantity",    "Wilson formula. Ισορροπεί holding vs ordering cost."],
+        ["POQ", "Periodic Order Quantity",    "Κάλυψη Τ* ημερών, όπου Τ* = EOQ / ημερήσια ζήτηση (7–60 ημ.)."],
+        ["WW",  "Wagner-Whitin",              "Dynamic programming σε κυλιόμενο ορίζοντα· εκδίδεται η πρώτη παραγγελία της βέλτιστης λύσης."],
     ]
     story.append(make_table(lot_table, col_widths=[1.8*cm, 4*cm, 9.2*cm]))
 
@@ -666,6 +681,24 @@ def build_content(styles: dict) -> list:
     for b in backtest_list:
         story.append(P("• " + b, styles["body"]))
 
+    story.append(P(
+        "<b>Δίκαιη σύγκριση.</b> Και τα δύο σενάρια ξεκινούν από το ίδιο αρχικό "
+        "απόθεμα (ανακατασκευή από το snapshot και τις κινήσεις) και από την ίδια "
+        "pipeline παραγγελιών σε εξέλιξη (παραλαβές μέσα στο lead time από την "
+        "έναρξη του παραθύρου, που προέρχονται από αποφάσεις πριν από αυτό). Η "
+        "δυναμική του αποθέματος είναι ίδια (lost sales, χωρίς αρνητικό απόθεμα). "
+        "Σε κάθε ημερομηνία αναθεώρησης ο agent βλέπει μόνο κινήσεις ≤ t "
+        "(χωρίς look-ahead).", styles["body"]
+    ))
+    story.append(P(
+        "<b>Βάση κόστους.</b> Όλα τα κόστη εκφράζονται για τη διάρκεια του παραθύρου: "
+        "holding = μέση αξία αποθέματος × ετήσιο ποσοστό × ημέρες/365· stockout = "
+        "χαμένο περιθώριο + premium επείγουσας προμήθειας εντός παραθύρου· ordering = "
+        "πλήθος παραγγελιών × €50· TCO = άθροισμα των τριών. Το ετήσιο ισοδύναμο "
+        "(× 365/ημέρες) αναφέρεται χωριστά και δεν πρέπει να αναχθεί ξανά σε ετήσια "
+        "βάση.", styles["body"]
+    ))
+
     story.append(P("6.1 Τρία Cost Scenarios", styles["h2"]))
     story.append(P(
         "Επειδή το πραγματικό holding rate μιας εταιρείας είναι άγνωστο, "
@@ -737,19 +770,24 @@ def build_content(styles: dict) -> list:
         "Από την κατανομή των samples υπολογίζουμε:", styles["body"]
     ))
     bootstrap_outputs = [
-        "<b>Mean &amp; Median</b> των savings",
-        "<b>Standard error</b> — μέτρο διασποράς",
-        "<b>95% Confidence Interval</b> μέσω percentile method (παίρνουμε "
-        "τα 2.5% και 97.5% percentiles)",
-        "<b>p-value</b> για τον έλεγχο H₀: savings = 0",
-        "<b>Significance verdict</b>: CI πρέπει να εξαιρεί το 0 ΚΑΙ p &lt; 0.05",
+        "<b>Στάδιο 1 — τυχαία παράθυρα (block subsampling):</b> N = 30 παράθυρα "
+        "των 21 ημερών (seed 42) → δείγμα εξοικονομήσεων s₁…s₃₀",
+        "<b>Στάδιο 2 — bootstrap του μέσου:</b> B = 2.000 επαναδειγματοληψίες με "
+        "επανάθεση → 95% percentile CI του <i>μέσου</i> και bootstrap p-value "
+        "(ποσοστό επαναδειγματοληψιών με μέσο ≤ 0)",
+        "<b>Συμπληρωματικοί έλεγχοι:</b> t-CI του μέσου (df = 29), μονόπλευρος "
+        "t-test, ακριβής έλεγχος προσήμου (distribution-free)",
+        "<b>Διασπορά μεμονωμένου παραθύρου</b> (2,5–97,5 εκατοστημόρια των 30 τιμών) "
+        "— δείχνει τι μπορεί να δώσει ένα παράθυρο, ΟΧΙ την αβεβαιότητα του μέσου",
+        "<b>Significance verdict</b>: το CI του μέσου εξαιρεί το 0 ΚΑΙ p &lt; 0.05",
     ]
     for o in bootstrap_outputs:
         story.append(P("• " + o, styles["body"]))
 
     story.append(P("7.3 Αλγόριθμος", styles["h2"]))
     story.append(code_block(
-        "function bootstrap_analysis(history_start, history_end, N=30):\n"
+        "function bootstrap_analysis(history_start, history_end, N=30, B=2000):\n"
+        "    # Stage 1: random windows\n"
         "    samples = []\n"
         "    for i in 1..N:\n"
         "        w_start, w_end = random_window(\n"
@@ -757,13 +795,17 @@ def build_content(styles: dict) -> list:
         "        asis_tco, tobe_tco = run_backtest(w_start, w_end)\n"
         "        samples.append(asis_tco - tobe_tco)\n"
         "\n"
-        "    mean = average(samples)\n"
-        "    ci_lower = percentile(samples, 2.5)\n"
-        "    ci_upper = percentile(samples, 97.5)\n"
-        "    p_value = 2 * min(\n"
-        "        proportion(samples >= 0),\n"
-        "        proportion(samples <= 0))\n"
-        "    return mean, ci_lower, ci_upper, p_value",
+        "    # Stage 2: bootstrap of the mean\n"
+        "    means = []\n"
+        "    for b in 1..B:\n"
+        "        resample = draw N values from samples WITH replacement\n"
+        "        means.append(average(resample))\n"
+        "    ci_lower = percentile(means, 2.5)\n"
+        "    ci_upper = percentile(means, 97.5)\n"
+        "    p_value  = (count(means <= 0) + 1) / (B + 1)\n"
+        "\n"
+        "    # complementary: t-CI (df=N-1), one-sided t-test, exact sign test\n"
+        "    return average(samples), ci_lower, ci_upper, p_value",
         styles["code"]
     ))
 
@@ -782,13 +824,16 @@ def build_content(styles: dict) -> list:
         "  BOOTSTRAP CONFIDENCE INTERVALS\n"
         "══════════════════════════════════════════════\n"
         "\n"
-        "  Bootstrap samples: 30\n"
-        "  Mean savings:     +€64,568\n"
-        "  Median savings:   +€65,610\n"
-        "  Std error:        €16,337\n"
-        "  95% CI:           [+€45,665, +€85,506]\n"
-        "  p-value:          0.0000\n"
-        "  Significant?      [YES] (CI excludes 0, p < 0.05)",
+        "  Stage 1 - windows:   30 random windows x 21 days\n"
+        "  Stage 2 - resamples: B = 2,000 (bootstrap of the mean)\n"
+        "  Mean savings / window:               +EUR 3,073\n"
+        "  Std deviation / std error of mean:   EUR 2,649 / EUR 484\n"
+        "  95% CI of mean (bootstrap, B=2000):  [+EUR 2,148, +EUR 3,997]\n"
+        "  95% CI of mean (t, df=29):           [+EUR 2,084, +EUR 4,062]\n"
+        "  p-value bootstrap / t-test / sign:   0.0005 / <0.0001 / <0.0001\n"
+        "  Windows positive:                    28 / 30\n"
+        "  Significant?      [YES] (CI of the mean excludes 0, p < 0.05)\n"
+        "  (synthetic data, seed 42 - real data gives different figures)",
         styles["code"]
     ))
 
@@ -798,11 +843,13 @@ def build_content(styles: dict) -> list:
         "είναι τυχαίο;»</i>, η απάντηση είναι:", styles["body"]
     ))
     story.append(P(
-        "<i>«Τρέξαμε 30 ανεξάρτητα backtest σε τυχαία επιλεγμένα παράθυρα "
-        "από όλο το ιστορικό. Το διάστημα εμπιστοσύνης 95% για το TCO "
-        "savings ήταν [€45K — €85K], με bootstrap p-value &lt; 0.0001. "
-        "Άρα η εξοικονόμηση είναι στατιστικά σημαντική και διατηρείται "
-        "σε διαφορετικές ιστορικές περιόδους.»</i>", styles["callout"]
+        "<i>«Τρέξαμε 30 backtest σε τυχαία επιλεγμένα παράθυρα 21 ημερών από όλο "
+        "το ιστορικό και εφαρμόσαμε bootstrap του μέσου με 2.000 επαναδειγματοληψίες. "
+        "Το 95% διάστημα εμπιστοσύνης της μέσης εξοικονόμησης δεν περιλαμβάνει το "
+        "μηδέν, ο t-test και ο έλεγχος προσήμου συμφωνούν (p &lt; 0,001) και η "
+        "συντριπτική πλειονότητα των παραθύρων είναι θετική. Άρα η εξοικονόμηση "
+        "είναι στατιστικά σημαντική και δεν οφείλεται σε ευνοϊκή περίοδο.»</i>",
+        styles["callout"]
     ))
 
     story.append(P("7.7 Bιβλιογραφία", styles["h2"]))
@@ -1152,10 +1199,12 @@ def build_content(styles: dict) -> list:
     ))
 
     qa_list = [
-        ("Q: Πώς ξέρετε ότι τα 31% savings δεν είναι τυχαία;",
-         "A: Bootstrap analysis με 30 random windows. Mean savings = €64K, "
-         "95% CI [€45K — €85K], p < 0.0001. Στατιστικά σημαντικό. "
-         "(Ενότητα 7)"),
+        ("Q: Πώς ξέρετε ότι η εξοικονόμηση δεν είναι τυχαία;",
+         "A: Δύο στάδια: 30 τυχαία παράθυρα backtest και bootstrap του μέσου "
+         "(B = 2.000). Το 95% CI του μέσου εξαιρεί το 0, ο t-test και ο "
+         "ακριβής έλεγχος προσήμου συμφωνούν (p < 0,001). Τα ακριβή ποσά "
+         "διαβάζονται από το bootstrap_report_summary.csv της τελικής "
+         "εκτέλεσης. (Ενότητα 7)"),
 
         ("Q: Παίζουν όλοι οι 7 κανόνες πραγματικό ρόλο;",
          "A: Leave-one-out ablation study δείχνει ότι οι buffer rules "
