@@ -1,0 +1,19 @@
+# Streamlit theme for the Replenishment Agent dashboard (presentation mode)
+[theme]
+base = "light"
+primaryColor = "#2a78d6"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f3f2ee"
+textColor = "#0b0b0b"
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
+runOnSave = false
+
+[client]
+toolbarMode = "minimal"
+showErrorDetails = true
