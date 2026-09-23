@@ -30,4 +30,5 @@ Thumbs.db
 # Generated evaluation reports & synthetic sample data (run_all.bat recreates them)
 bootstrap_report*.csv
 ablation_report.csv
+forecast_report*.csv
 data/samples/
