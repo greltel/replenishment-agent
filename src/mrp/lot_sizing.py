@@ -187,6 +187,53 @@ def wagner_whitin_first_order(
 # ============================================================
 KNOWN_POLICIES = ("LFL", "FOQ", "EOQ", "POQ", "WW")
 
+# Minimum number of consumption events before a CV-based choice is trusted.
+MIN_EVENTS_FOR_CV = 3
+
+
+def select_policy(
+    abc_class: str | None,
+    cv: float | None,
+    n_events: int | None = None,
+) -> str:
+    """Automatic lot-sizing policy from ABC class × demand variability (CV).
+
+    This is the selection logic of thesis Table 4.3 (after Silver, Pyke &
+    Peterson 1998; Vollmann et al. 2005; Drexl & Kimms 1997). It is applied
+    when the SAP master data carries no explicit lot-sizing procedure
+    (MARC-DISLS) — an explicit procedure always wins, see
+    src/data_layer/master_data_enrichment.derive_lot_sizing.
+
+        A-class, CV < 0.5     → WW   reliable per-period requirements: the
+                                     dynamic programme pays off for high-value
+                                     items
+        A-class, 0.5 ≤ CV ≤ 1 → POQ  moderate uncertainty: fixed order cycle,
+                                     quantity follows the period forecast
+        A-class, CV > 1       → LFL  lumpy demand: no cycle stock of expensive
+                                     items, the safety stock absorbs variability
+        B-class               → EOQ  cost balance with low administrative effort
+        C-class               → FOQ  simple fixed lots for cheap items
+
+    `cv` is the coefficient of variation of WEEKLY demand (std/mean over the
+    weekly buckets of the history), which matches the weekly review cycle of
+    the agent. Materials with too little history (fewer than
+    MIN_EVENTS_FOR_CV consumption events, or no CV at all) get LFL.
+    """
+    if n_events is not None and n_events < MIN_EVENTS_FOR_CV:
+        return "LFL"
+    abc = (abc_class or "C").strip().upper()
+    if abc == "A":
+        if cv is None:
+            return "LFL"
+        if cv < 0.5:
+            return "WW"
+        if cv <= 1.0:
+            return "POQ"
+        return "LFL"
+    if abc == "B":
+        return "EOQ"
+    return "FOQ"
+
 
 def apply_lot_sizing(
     net_req: float,

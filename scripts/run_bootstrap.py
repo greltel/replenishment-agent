@@ -9,7 +9,7 @@ the TCO savings (As-Is − To-Be) into a bootstrap distribution. Reports:
 
 Usage:
     python scripts/run_bootstrap.py
-    python scripts/run_bootstrap.py --n-samples 50 --window-size 30
+    python scripts/run_bootstrap.py --n-samples 50 --window-size 30   # shorter windows
     python scripts/run_bootstrap.py --scenario aggressive --n-samples 100
 
 References:
@@ -151,8 +151,11 @@ def main():
     parser.add_argument("--n-samples", type=int, default=30,
                         help="Number of bootstrap iterations (default 30; "
                              "use 100+ for tighter CIs)")
-    parser.add_argument("--window-size", type=int, default=21,
-                        help="Backtest window size in days (default 21)")
+    parser.add_argument("--window-size", type=int, default=60,
+                        help="Backtest window size in days (default 60: the same length "
+                             "as the main backtest and at least as long as the longest "
+                             "import lead time, so every window contains the agent's "
+                             "decisions AND their consequences)")
     parser.add_argument("--scenario", type=str, default="realistic",
                         choices=list(SCENARIOS.keys()),
                         help="Cost scenario (default: realistic)")

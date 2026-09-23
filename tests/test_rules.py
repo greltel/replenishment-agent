@@ -177,3 +177,28 @@ class TestExpediteScope:
         later = {"qty": 50, "rule_triggered": None, "date": today + timedelta(days=20)}
         assert expedite_critical(now, sample_material, beliefs, AgentDesires())["expedite"] is True
         assert expedite_critical(later, sample_material, beliefs, AgentDesires()).get("expedite", False) is False
+
+
+class TestOrderableQuantities:
+    """R-MOQ-ENFORCE also rounds to whole units / pack multiples."""
+
+    def test_whole_units_for_discrete_uom(self, sample_material):
+        from src.agent.base import AgentDesires
+        from src.rules.policies import enforce_moq
+        sample_material.moq = 1; sample_material.fixed_lot_size = 0; sample_material.uom = "PC"
+        out = enforce_moq({"qty": 70.38}, sample_material, beliefs={}, desires=AgentDesires())
+        assert out["qty"] == 71.0 and "R-MOQ-ENFORCE" in out["rule_triggered"]
+
+    def test_pack_multiple_when_fixed_lot_defined(self, sample_material):
+        from src.agent.base import AgentDesires
+        from src.rules.policies import enforce_moq
+        sample_material.moq = 10; sample_material.fixed_lot_size = 12; sample_material.uom = "PC"
+        out = enforce_moq({"qty": 25.0}, sample_material, beliefs={}, desires=AgentDesires())
+        assert out["qty"] == 36.0
+
+    def test_continuous_uom_keeps_fraction(self, sample_material):
+        from src.agent.base import AgentDesires
+        from src.rules.policies import enforce_moq
+        sample_material.moq = 1; sample_material.fixed_lot_size = 0; sample_material.uom = "KG"
+        out = enforce_moq({"qty": 70.38}, sample_material, beliefs={}, desires=AgentDesires())
+        assert out["qty"] == 70.38 and not out.get("rule_triggered")

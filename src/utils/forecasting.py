@@ -6,6 +6,13 @@ Three methods provided:
   2. moving_average — N-period moving average
   3. exponential_smoothing — single exponential smoothing (Holt's level)
 
+plus "auto": the method with the lowest walk-forward WMAPE per material
+(see select_method). The agent's default stays the moving average: on the
+importer dataset the automatic choice was marginally worse on the main
+window and clearly worse on winter windows with a short, pre-season history
+(thesis §4.9) — a reactive method is the robust choice until seasonal
+models (Croston/SBA, seasonal smoothing) are added.
+
 For PoC we keep these simple and explainable. ML-based forecasting can be
 added later as a drop-in replacement.
 """
@@ -103,6 +110,41 @@ def exponential_smoothing(
     return [level] * horizon_days
 
 
+AUTO_MIN_WEEKS = 12          # weeks of history needed before "auto" trusts the validation
+
+
+def select_method(history: pd.Series) -> str:
+    """Pick the forecasting method for ONE material by walk-forward validation.
+
+    The daily history is aggregated to weekly buckets (the level at which the
+    weekly review uses the forecast) and the three methods are compared with
+    rolling-origin validation — 5 folds, train 8 weeks → test 2 weeks, the
+    same setting as the dashboard's "Πρόβλεψη ζήτησης" tab — on WMAPE
+    (Syntetos & Boylan 2005). Only the history handed in is used, so a
+    backtest that passes movements ≤ t stays free of look-ahead bias.
+
+    Falls back to the moving average when the history is too short
+    (< AUTO_MIN_WEEKS weeks) or carries no demand.
+    """
+    if history is None or len(history) == 0:
+        return "moving_average"
+    nonzero = history[history > 0]
+    if nonzero.empty:
+        return "moving_average"
+    weekly = history[history.index >= nonzero.index[0]].resample("W").sum()
+    if len(weekly) < AUTO_MIN_WEEKS or float(weekly.sum()) <= 0:
+        return "moving_average"
+    # As many 2-week folds as the history allows (up to 20 = 40 weeks), so
+    # that the choice reflects the whole year — a selection made on the last
+    # ten weeks alone is fooled by seasonality.
+    n_folds = max(3, min(20, (len(weekly) - 8) // 2))
+    comparison = compare_methods(
+        weekly, train_window=8, test_window=2, n_folds=n_folds,
+        method_kwargs={"moving_average": {"window": 4}},
+    )
+    return best_method(comparison, metric="wmape")
+
+
 def forecast(
     movements: Sequence,
     horizon_days: int,
@@ -118,9 +160,14 @@ def forecast(
     movements : list of Movement objects (from DB)
     horizon_days : how many days ahead to forecast
     method : 'simple_average' | 'moving_average' | 'exponential_smoothing'
+             | 'auto' (best of the three per material by walk-forward WMAPE,
+             see select_method)
     as_of : anchor date for the history (see consumption_to_daily_series)
     """
     history = consumption_to_daily_series(movements, as_of=as_of)
+
+    if method == "auto":
+        method = select_method(history)
 
     if method == "simple_average":
         return simple_average(history, horizon_days)

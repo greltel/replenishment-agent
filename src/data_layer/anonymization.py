@@ -168,8 +168,10 @@ def anonymize_materials(
                 df[col] = parse_sap_number_series(df[col])
 
         # Map SAP lot-sizing procedures (MARC-DISLS) to our internal codes
+        # Unknown / blank procedures stay blank so that the enrichment can
+        # choose a policy from ABC × CV (an explicit "EX" stays lot-for-lot).
         df["lot_sizing"] = (df["lot_sizing_raw"].astype(str).str.strip().str.upper()
-                            .map(SAP_LOT_SIZING_MAP).fillna("LFL"))
+                            .map(SAP_LOT_SIZING_MAP).fillna(""))
         df = df.drop(columns=["lot_sizing_raw"])
 
     # ABC classification (if not present, derive from cost × frequency proxy)

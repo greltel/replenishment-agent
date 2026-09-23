@@ -47,13 +47,19 @@ Source 4: Default 1
 
 LOT SIZING POLICY
 ─────────────────
-Source 1: MARC.DISLS if available (mapped EX→LFL, FX→FOQ, WB→EOQ, PK→POQ)
-Source 2: Heuristic based on demand pattern:
-            • CV > 1.0 (highly variable) → Wagner-Whitin (W-W)
-            • CV in (0.5, 1.0)            → POQ
-            • CV ≤ 0.5 (stable)           → EOQ if cost known else FOQ
-            • No history                  → LFL
-          where CV = std(monthly_demand) / mean(monthly_demand)
+Source 1: MARC.DISLS if available (mapped via SAP_LOT_SIZING_MAP, e.g.
+          EX→LFL, FX→FOQ, WB/MB/PK→POQ, WI/BE/SP/GR/DY→WW)
+Source 2: ABC class × CV of weekly demand (thesis Table 4.3, implemented in
+          src/mrp/lot_sizing.select_policy):
+            • A, CV < 0.5        → Wagner-Whitin (WW)
+            • A, 0.5 ≤ CV ≤ 1.0  → POQ
+            • A, CV > 1.0        → LFL
+            • B                  → EOQ
+            • C                  → FOQ (fixed lot ≈ 4 weeks of demand, rounded
+                                        up to a multiple of the MOQ)
+            • fewer than 3 consumption events → LFL
+          where CV = std(weekly_demand) / mean(weekly_demand) over the
+          history (weekly buckets, zero weeks included)
 
 ABC CLASSIFICATION
 ──────────────────
@@ -65,12 +71,16 @@ Source 3: All B class (neutral default)
 """
 from __future__ import annotations
 
+import math
+
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+from src.mrp.lot_sizing import MIN_EVENTS_FOR_CV, select_policy
 
 from src.utils.logger import log
 
@@ -96,10 +106,9 @@ DEFAULT_MOQ = 1.0
 DEFAULT_FIXED_LOT_SIZE = 0.0
 DEFAULT_SERVICE_LEVEL = 0.98   # 98% target
 
-# Movement types that indicate consumption (negative stock impact)
-CONSUMPTION_MVT_TYPES = {"261", "201", "281", "601", "641", "302", "310", "312", "322", "702"}
-# Movement types that indicate receipts (positive stock impact)
-RECEIPT_MVT_TYPES = {"101", "301", "309", "311", "321", "651", "701", "262", "202", "282", "602"}
+# Movement types that constitute demand live in one place:
+# src/data_layer/models.CONSUMPTION_MOVEMENT_TYPES (sign convention: consumption
+# is stored with a NEGATIVE quantity, receipts with a positive one).
 
 
 # ============================================================
@@ -113,7 +122,9 @@ class MaterialStats:
     total_consumed: float = 0.0
     avg_daily_demand: float = 0.0
     std_daily_demand: float = 0.0
-    cv_demand: float = 0.0           # coefficient of variation
+    cv_demand: float = 0.0           # coefficient of variation (daily, consumption days)
+    cv_weekly: float = 0.0           # coefficient of variation of weekly demand
+    n_weeks: int = 0                 # weekly buckets covered by the history
     consumption_active_days: int = 0  # days from first to last consumption
     annual_demand: float = 0.0
     median_po_qty: float | None = None
@@ -168,6 +179,14 @@ def compute_material_stats(
                 s.std_daily_demand = float(daily.std(ddof=0))
                 if s.avg_daily_demand > 0:
                     s.cv_demand = s.std_daily_demand / s.avg_daily_demand
+
+            # Weekly demand buckets (zero weeks included) → CV used for the
+            # ABC × CV lot-sizing choice (weekly review cycle of the agent)
+            weekly = (grp.set_index("posting_date")["abs_qty"]
+                         .resample("W-MON", label="left", closed="left").sum())
+            s.n_weeks = int(len(weekly))
+            if len(weekly) >= 2 and float(weekly.mean()) > 0:
+                s.cv_weekly = float(weekly.std(ddof=0) / weekly.mean())
 
             # Annual demand projection (extrapolate from observed period)
             if active_days >= 30:
@@ -277,8 +296,10 @@ def derive_moq(
 def derive_lot_sizing(
     existing: str | None,
     stats: MaterialStats,
+    abc_class: str | None = None,
 ) -> tuple[str, str]:
-    """Lot-sizing policy from MARC.DISLS or based on demand variability (CV).
+    """Lot-sizing policy from MARC.DISLS or, failing that, from ABC class ×
+    CV of weekly demand (thesis Table 4.3, `src.mrp.lot_sizing.select_policy`).
 
     Note: 'LFL' is treated as a "default placeholder" — if we have demand
     history, we override it with a more informed choice.
@@ -288,25 +309,37 @@ def derive_lot_sizing(
 
     # If MARC value exists AND it's not the default LFL placeholder, keep it
     if has_existing and not is_default:
-        return str(existing).strip(), "MARC.DISLS"
+        return str(existing).strip().upper(), "MARC.DISLS"
 
-    # Otherwise derive from demand pattern (if any history)
+    # Otherwise derive from ABC class and demand pattern (if any history)
     if stats.n_consumption_events == 0:
         return "LFL", "default (no history)"
-
-    # Need at least a few events for meaningful CV
-    if stats.n_consumption_events < 3:
+    if stats.n_consumption_events < MIN_EVENTS_FOR_CV:
         return "LFL", "derived (sparse history)"
 
-    cv = stats.cv_demand
-    if cv > 1.0:
-        return "WW", "derived (CV>1.0, highly variable)"
-    elif cv > 0.5:
-        return "POQ", "derived (CV 0.5-1.0)"
-    elif cv > 0:
-        return "EOQ", "derived (CV<0.5, stable)"
-    else:
-        return "FOQ", "derived (insufficient variance)"
+    policy = select_policy(abc_class, stats.cv_weekly, stats.n_consumption_events)
+    return policy, f"derived (ABC {abc_class or '?'} × CV {stats.cv_weekly:.2f})"
+
+
+def derive_fixed_lot_size(
+    existing: float,
+    stats: MaterialStats,
+    moq: float,
+    policy: str,
+    weeks: int = 4,
+) -> tuple[float, str]:
+    """Fixed lot for FOQ materials: MARC.BSTFE if present, otherwise about
+    `weeks` weeks of average demand rounded UP to a multiple of the MOQ.
+    Non-FOQ policies keep whatever the master data says (0 = not used)."""
+    if existing and existing > 0:
+        return float(existing), "MARC.BSTFE"
+    if (policy or "").upper() != "FOQ":
+        return 0.0, "n/a"
+    base = max(moq or 1.0, 1.0)
+    if stats.avg_daily_demand > 0:
+        lot = math.ceil((stats.avg_daily_demand * 7 * weeks) / base) * base
+        return float(max(lot, base)), f"derived ({weeks} weeks demand, MOQ multiple)"
+    return float(base), "derived (= MOQ)"
 
 
 def derive_abc_class(
@@ -395,13 +428,18 @@ def enrich_master_data(
         lambda mid: stats_dict[mid].annual_demand if mid in stats_dict else 0.0
     )
 
+    # ABC first: the lot-sizing choice depends on it (Pareto on cost × annual
+    # demand; the existing column, if any, is unlikely to be meaningful)
+    abc_series = derive_abc_class(None, df)
+
     # Derive each field row by row
     derived_records = []
     n_derived = {"lead_time": 0, "safety_stock": 0, "moq": 0, "lot_sizing": 0}
 
-    for _, row in df.iterrows():
+    for idx, row in df.iterrows():
         mid = row["material_id"]
         s = stats_dict.get(mid, MaterialStats(material_id=mid))
+        abc = str(abc_series.loc[idx])
 
         # Lead time
         existing_lt = row.get("lead_time_days", 0) or 0
@@ -425,11 +463,15 @@ def enrich_master_data(
         if moq_src != "MARC.BSTMI":
             n_derived["moq"] += 1
 
-        # Lot sizing
+        # Lot sizing (ABC × weekly CV unless MARC.DISLS is explicit)
         existing_ls = row.get("lot_sizing", None)
-        ls, ls_src = derive_lot_sizing(existing_ls, s)
+        ls, ls_src = derive_lot_sizing(existing_ls, s, abc)
         if ls_src != "MARC.DISLS":
             n_derived["lot_sizing"] += 1
+
+        # Fixed lot size (only meaningful for FOQ)
+        existing_fls = row.get("fixed_lot_size", 0) or 0
+        fls, _ = derive_fixed_lot_size(existing_fls, s, moq, ls)
 
         derived_records.append({
             "lead_time_days":    lt,
@@ -437,26 +479,26 @@ def enrich_master_data(
             "reorder_point":     rop,
             "moq":               moq,
             "lot_sizing":        ls,
+            "fixed_lot_size":    fls,
+            "abc_class":         abc,
             "lt_source":         lt_src,
             "ss_source":         ss_src,
             "moq_source":        moq_src,
             "ls_source":         ls_src,
             "avg_daily_demand":  s.avg_daily_demand,
             "cv_demand":         s.cv_demand,
+            "cv_weekly":         s.cv_weekly,
         })
 
     derived_df = pd.DataFrame(derived_records, index=df.index)
 
     # Overwrite the relevant columns in df with derived values
-    for col in ["lead_time_days", "safety_stock", "reorder_point", "moq", "lot_sizing"]:
+    for col in ["lead_time_days", "safety_stock", "reorder_point", "moq", "lot_sizing",
+                "fixed_lot_size", "abc_class"]:
         df[col] = derived_df[col].values
     for col in ["lt_source", "ss_source", "moq_source", "ls_source",
-                "avg_daily_demand", "cv_demand"]:
+                "avg_daily_demand", "cv_demand", "cv_weekly"]:
         df[col] = derived_df[col].values
-
-    # Re-derive ABC when we have movement history (the existing column,
-    # if any, is unlikely to be meaningful for this dataset)
-    df["abc_class"] = derive_abc_class(None, df).values
 
     # Logging summary
     n_total = len(df)

@@ -20,8 +20,10 @@ def main():
     parser.add_argument("--horizon", type=int, default=config.planning_horizon_days,
                         help="Planning horizon in days")
     parser.add_argument("--method", type=str, default="moving_average",
-                        choices=["simple_average", "moving_average", "exponential_smoothing"],
-                        help="Demand forecasting method")
+                        choices=["moving_average", "simple_average", "exponential_smoothing", "auto"],
+                        help="Demand forecasting method (default moving_average; 'auto' picks "
+                             "the best of the three per material by walk-forward WMAPE — "
+                             "see thesis §4.9 for why it is not the default)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Don't persist proposals to DB")
     args = parser.parse_args()

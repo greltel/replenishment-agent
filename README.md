@@ -22,7 +22,8 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Generate sample data (mock SAP exports — 150 SKUs, 12 μήνες ιστορικό)
+# 4. Generate sample data (συνθετικά SAP exports — 150 κωδικοί ανταλλακτικών
+#    αυτοκινήτων, 12 μήνες ιστορικό, βαθμονομημένα στο προφίλ εισαγωγέα)
 python scripts/generate_sample_data.py
 
 # 5. Load data into SQLite
@@ -37,14 +38,15 @@ python scripts/run_validation.py --all-scenarios
 python scripts/run_validation.py --sensitivity
 python scripts/run_bootstrap.py
 python scripts/run_rule_ablation.py --stress-test
+python scripts/run_forecast_eval.py
 
 # 8. Launch dashboard
 streamlit run dashboard/app.py
 # → http://localhost:8501
 ```
 
-Στα Windows μπορείτε απλώς να τρέξετε `run_all.bat` (κάνει τα βήματα 4–7)
-και μετά `start_dashboard.bat`.
+Στα Windows μπορείτε απλώς να τρέξετε `run_all.bat` (κάνει τα βήματα 4–7,
+~10–12 λεπτά) και μετά `start_dashboard.bat`. Σε Linux/macOS: `./run_all.sh`.
 
 ## Δομή Project
 
@@ -59,7 +61,7 @@ replenishment-agent/
 │   ├── copilot/            # AI Copilot (local LLM via Ollama, read-only tools)
 │   └── utils/              # KPIs, cost model, bootstrap, forecasting, calendar, logger
 ├── dashboard/              # Streamlit dashboard (6 tabs)
-├── tests/                  # pytest test suite (190+ tests)
+├── tests/                  # pytest test suite (203 tests)
 ├── scripts/                # Entry points (CLI)
 ├── abap/                   # SAP ABAP extractor program (ZMRP_AGENT_EXPORT)
 ├── data/
@@ -68,6 +70,24 @@ replenishment-agent/
 │   └── samples/            # Generated mock data (git-ignored, reproducible με seed 42)
 └── docs/                   # Documentation (Παραρτήματα ΔΕ, οδηγοί)
 ```
+
+## Πώς αποφασίζει ο πράκτορας (σύνοψη — αναλυτικά στη ΔΕ, Κεφ. 4)
+
+1. **Perceive**: απόθεμα, ανοιχτές παραγγελίες, ιστορικό κινήσεων
+   (καταναλώσεις = εξαγωγές προς πελάτες 601/251 + αναλώσεις 261/201/281) και
+   master data ανά υλικό, ως την ημερομηνία αναφοράς.
+2. **MRP engine** (time-phased, ορίζοντας 60 ημερών): πρόβλεψη ζήτησης
+   (default κινητός μέσος), προβολή αποθέματος, καθαρές απαιτήσεις κάτω από
+   το απόθεμα ασφαλείας, lot sizing με την πολιτική του υλικού (LFL / FOQ /
+   EOQ / POQ / Wagner-Whitin — αυτόματη επιλογή ABC × CV αν λείπει το
+   MARC-DISLS), offset κατά lead time και **ενοποίηση εκδόσεων ανά 7 ημέρες**
+   (ένα planned order αντί πολλών ημερήσιων).
+3. **Rule engine** (7 κανόνες με σειρά προτεραιότητας): R-DEAD-STOCK,
+   R-EXPEDITE, R-SAFETY-BUFFER-A (+20 % στα A), R-LONG-LEAD-BUFFER (+15 % αν
+   LT > 30 ημ.), R-MOQ-ENFORCE (≥ MOQ, πολλαπλάσιο συσκευασίας, ακέραιες
+   μονάδες για διακριτές UoM), R-CALENDAR-SHIFT, R-COST-ESTIMATE.
+4. **Act**: εγγραφή προτάσεων (πότε / πόσο / γιατί) στη βάση → dashboard /
+   AI Copilot.
 
 ## Πώς να χρησιμοποιήσετε με ΠΡΑΓΜΑΤΙΚΑ SAP δεδομένα
 
@@ -104,7 +124,8 @@ WI, BE, SP …) στις εσωτερικές πολιτικές LFL/FOQ/POQ/WW.
 | Safety stock | MARC.EISBE | `z × σ × √LT` (Silver-Pyke-Peterson) |
 | Reorder point | MARC.MINBE | `avg_daily × LT + SS` |
 | MOQ | MARC.BSTMI | Median PO qty ή 7 days demand |
-| Lot sizing | MARC.DISLS | Από CV: WW/POQ/EOQ/FOQ |
+| Lot sizing | MARC.DISLS | ABC × CV (Πίν. 4.3 ΔΕ): A→WW/POQ/LFL, B→EOQ, C→FOQ |
+| Fixed lot (FOQ) | MARC.BSTFE | 4 εβδομάδες ζήτησης, πολλαπλάσιο MOQ |
 | ABC | — | Pareto on `cost × annual_demand` |
 
 ### Ημερομηνία αναφοράς (as-of date)
@@ -123,7 +144,9 @@ WI, BE, SP …) στις εσωτερικές πολιτικές LFL/FOQ/POQ/WW.
 
 - **As-Is**: αναπαραγωγή των πραγματικών κινήσεων (κατανάλωση + παραλαβές 101)
 - **To-Be**: ο agent αποφασίζει κάθε 7 ημέρες βλέποντας μόνο κινήσεις ≤ t
-  (χωρίς look-ahead)· οι παραγγελίες του φτάνουν μετά το lead time
+  (χωρίς look-ahead)· οι παραγγελίες του φτάνουν μετά το lead time·
+  σε κάθε κύκλο εκδίδονται μόνο οι προτάσεις με ημερομηνία έκδοσης πριν τον
+  επόμενο κύκλο (opening period), οι υπόλοιπες επανυπολογίζονται
 - Και τα δύο σενάρια ξεκινούν από το **ίδιο** αρχικό απόθεμα (ανακατασκευή
   από το snapshot και τις κινήσεις) και από την **ίδια** pipeline παραγγελιών
   σε εξέλιξη (παραλαβές μέσα στο lead time από την έναρξη του παραθύρου)
@@ -204,7 +227,13 @@ python scripts/run_rule_ablation.py --stress-test
 - **Πρόβλεψη** για τις επόμενες 14-90 ημέρες με 3 μεθόδους ταυτόχρονα
   (simple average, moving average 30d, exponential smoothing α=0.3)
 - **Ακρίβεια** μέσω walk-forward validation (5 folds, rolling-origin)
-- **Metrics**: MAE, RMSE, MAPE, Bias · auto-recommendation βάσει MAPE
+- **Metrics**: MAE, RMSE, WMAPE, Bias (εβδομαδιαίο επίπεδο — το MAPE δεν
+  ορίζεται σε διακοπτόμενη ζήτηση με μηδενικές εβδομάδες)
+- **`python scripts/run_forecast_eval.py`** → `forecast_report.csv` (WMAPE ανά
+  υλικό/μέθοδο) και `forecast_report_summary.csv` (Πίν. 4.12–4.13 ΔΕ)
+- Μέθοδος `auto` (walk-forward επιλογή ανά υλικό) υπάρχει ως επιλογή
+  (`run_agent.py --method auto`, `run_validation.py --forecast-method auto`)·
+  **default παραμένει ο κινητός μέσος** — βλ. ΔΕ §4.9.2 γιατί
 
 **Methodology reference**: Bergmeir & Benítez (2012).
 
@@ -212,16 +241,16 @@ python scripts/run_rule_ablation.py --stress-test
 
 Δύο στάδια (ΔΕ §3.6.3):
 
-1. **N τυχαία παράθυρα** (default 30 × 21 ημέρες, seed 42) → εξοικονόμηση
+1. **N τυχαία παράθυρα** (default 30 × 60 ημέρες, seed 42) → εξοικονόμηση
    sᵢ = TCO(As-Is) − TCO(To-Be) ανά παράθυρο
 2. **Bootstrap του μέσου** (B = 2.000 επαναδειγματοληψίες) → 95% percentile
    CI του μέσου + bootstrap p-value· συμπληρωματικά t-CI (df = N−1),
    μονόπλευρος t-test και ακριβής έλεγχος προσήμου
 
 ```bash
-python scripts/run_bootstrap.py                       # 30 × 21 ημέρες
+python scripts/run_bootstrap.py                       # 30 × 60 ημέρες (~5 λεπτά)
 python scripts/run_bootstrap.py --n-samples 100       # στενότερα CI
-python scripts/run_bootstrap.py --scenario aggressive --window-size 30
+python scripts/run_bootstrap.py --scenario aggressive --window-size 90
 ```
 
 **Output**:
@@ -243,6 +272,7 @@ python scripts/run_bootstrap.py --scenario aggressive --window-size 30
 | `bootstrap_report_summary.csv` | `run_bootstrap.py` | Πίν. 4.9 |
 | `bootstrap_report.csv` | `run_bootstrap.py` | Πίν. Γ.1, Σχ. 4.2 |
 | `ablation_report.csv` | `run_rule_ablation.py --stress-test` | Πίν. 4.10 |
+| `forecast_report_summary.csv` | `run_forecast_eval.py` | Πίν. 4.12, 4.13 |
 
 ## 📖 Τεκμηρίωση
 

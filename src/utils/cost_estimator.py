@@ -44,6 +44,7 @@ from src.utils.logger import log
 # Default unit costs by material type (€/unit) — used when STPRS is missing.
 # Conservative ranges drawn from manufacturing benchmarks.
 DEFAULT_COST_BY_TYPE: dict[str, float] = {
+    "HAWA": 30.00,   # Trading goods (spare parts) — mid-tier
     "ROH":  5.00,    # Raw materials — cheapest
     "HALB": 25.00,   # Semi-finished — mid-tier
     "FERT": 80.00,   # Finished goods — most expensive

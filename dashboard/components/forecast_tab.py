@@ -58,9 +58,11 @@ def _top_consumer() -> str | None:
     """Material with the largest consumption in the history (a rich series)."""
     repo = Repository()
     try:
+        from src.data_layer.models import CONSUMPTION_MOVEMENT_TYPES
+        types = ",".join(f"'{t}'" for t in CONSUMPTION_MOVEMENT_TYPES)
         df = pd.read_sql(
             "SELECT material_id, SUM(ABS(quantity)) AS q FROM movements "
-            "WHERE movement_type IN ('261','201','281') GROUP BY material_id "
+            f"WHERE movement_type IN ({types}) GROUP BY material_id "
             "ORDER BY q DESC LIMIT 1", repo.engine)
     finally:
         repo.close()

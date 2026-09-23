@@ -8,6 +8,8 @@ A rule returning None suppresses the proposal entirely.
 """
 from __future__ import annotations
 
+import math
+
 from datetime import date, timedelta
 from typing import Callable, Optional
 
@@ -117,12 +119,27 @@ def safety_buffer_for_a_class(proposal: dict, material, beliefs, desires) -> dic
     return proposal
 
 
+CONTINUOUS_UOMS = {"KG", "G", "L", "ML", "M", "M2", "M3", "T", "TO"}
+
+
 @rule("R-MOQ-ENFORCE", priority=30)
 def enforce_moq(proposal: dict, material, beliefs, desires) -> dict:
-    """Round quantity up to MOQ if below."""
+    """Make the quantity orderable: at least the MOQ, a multiple of the fixed
+    lot size when one is defined (pack / carton size), and whole units for
+    discrete units of measure (a spare part is not ordered as 70.4 pieces).
+    Runs AFTER the buffer rules, so the buffers are rounded as well."""
+    qty = float(proposal["qty"])
+    original = qty
     moq = float(material.moq or 0.0)
-    if moq > 0 and proposal["qty"] < moq:
-        proposal["qty"] = moq
+    if moq > 0 and qty < moq:
+        qty = moq
+    lot = float(material.fixed_lot_size or 0.0)
+    if lot > 0:
+        qty = math.ceil(qty / lot - 1e-9) * lot
+    elif (material.uom or "PC").upper() not in CONTINUOUS_UOMS:
+        qty = float(math.ceil(qty - 1e-9))
+    if qty != original:
+        proposal["qty"] = qty
         existing = proposal.get("rule_triggered") or ""
         proposal["rule_triggered"] = (existing + " | R-MOQ-ENFORCE").strip(" |")
     return proposal
@@ -141,14 +158,19 @@ def shift_to_workday(proposal: dict, material, beliefs, desires) -> dict:
     return proposal
 
 
+LONG_LEAD_THRESHOLD_DAYS = 30     # sea freight / overseas suppliers
+LONG_LEAD_BUFFER = 1.15           # +15 % on the order quantity
+
+
 @rule("R-LONG-LEAD-BUFFER", priority=25)
 def long_lead_supplier_buffer(proposal: dict, material, beliefs, desires) -> dict:
     """
-    For materials with lead time > 14 days, add 15% safety buffer to qty
-    to absorb supplier variability.
+    For materials with a long import lead time (> 30 days — typically
+    overseas suppliers / sea freight), add a 15 % buffer to the quantity to
+    absorb lead-time variability (customs, consolidation, missed vessels).
     """
-    if material.lead_time_days and material.lead_time_days > 14:
-        proposal["qty"] = float(proposal["qty"]) * 1.15
+    if material.lead_time_days and material.lead_time_days > LONG_LEAD_THRESHOLD_DAYS:
+        proposal["qty"] = float(proposal["qty"]) * LONG_LEAD_BUFFER
         existing = proposal.get("rule_triggered") or ""
         proposal["rule_triggered"] = (existing + " | R-LONG-LEAD-BUFFER").strip(" |")
     return proposal

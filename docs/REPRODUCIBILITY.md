@@ -103,7 +103,7 @@ pip install -r requirements.txt
 pytest tests/ -q
 ```
 
-**Αναμενόμενο αποτέλεσμα**: `183 passed in ~17s`
+**Αναμενόμενο αποτέλεσμα**: `203 passed in ~20s`
 
 ---
 
@@ -116,7 +116,8 @@ pytest tests/ -q
 — με πραγματικά (ανωνυμοποιημένα) δεδομένα SAP οι αριθμοί διαφέρουν.
 
 Συντόμευση: `run_all.bat` (Windows) ή `./run_all.sh` (macOS/Linux) εκτελεί
-όλα τα βήματα 3.1–3.6 με τη σειρά (~6–8 λεπτά).
+όλα τα βήματα 3.1–3.6 και την αξιολόγηση πρόβλεψης (3.6α) με τη σειρά
+(~10–12 λεπτά).
 
 ### 3.1 Synthetic Data Generation
 
@@ -125,16 +126,22 @@ python scripts/generate_sample_data.py            # seed 42, snapshot 2026-09-21
 python scripts/generate_sample_data.py --snapshot-date today   # «ζωντανή» ημερομηνία
 ```
 
-**Reproducible parameters**: seed 42 · 150 υλικά · 365 ημέρες ιστορικό ·
+**Reproducible parameters**: seed 42 · 150 κωδικοί ανταλλακτικών αυτοκινήτων
+(οικογένειες service / μηχανικά / ηλεκτρικά / φανοποιίας, τύπος HAWA, ABC
+41/39/70) · 365 ημέρες ιστορικό · lead times 5–55 ημ. (Ευρώπη / Ασία) ·
 προσομοιωμένος «ανθρώπινος planner» για το As-Is (εβδομαδιαίες
-αναθεωρήσεις, καθυστερήσεις, μεγάλες παρτίδες) · 5 % αδρανή υλικά ·
-~4 % νέα υλικά · ~15 % εποχικά.
+αναθεωρήσεις με παραλείψεις 10–35 %, καθυστερήσεις 0–7 ημ., μεγάλες
+παρτίδες 15–30 % πάνω από το ROP) · 8 % αδρανή υλικά · 5 % νέα υλικά ·
+εποχικότητα ανά οικογένεια (χειμερινά / θερινά είδη). Το master data (SS, ROP,
+lot sizing) παράγεται από το ιστορικό με τους ίδιους κανόνες που εφαρμόζει
+το `master_data_enrichment.py` στα πραγματικά δεδομένα.
 
 **Output**: `data/samples/*.csv` (materials, stock, purchase_orders, movements)
 
-**Verification**: `materials.csv` → 150 γραμμές· `movements.csv` → ~25.000
-γραμμές· το snapshot αποθέματος ισούται με άνοιγμα + παραλαβές − αναλώσεις
-(εσωτερικά συνεπές dataset).
+**Verification**: `materials.csv` → 150 γραμμές· `movements.csv` → 18.622
+γραμμές (18.047 × 601, 575 × 101)· `purchase_orders.csv` → 37 ανοιχτές
+παραγγελίες· αξία αποθέματος snapshot ≈ €911 χιλ.· το snapshot αποθέματος
+ισούται με άνοιγμα + παραλαβές − εξαγωγές (εσωτερικά συνεπές dataset).
 
 ### 3.2 ETL Pipeline
 
@@ -147,7 +154,7 @@ python scripts/run_etl.py
 **Verification**:
 ```sql
 SELECT COUNT(*) FROM materials;  -- 150
-SELECT COUNT(*) FROM movements;  -- ~25,000
+SELECT COUNT(*) FROM movements;  -- 18,622
 SELECT MAX(snapshot_date) FROM stock;  -- 2026-09-21 (= ημερομηνία αναφοράς)
 ```
 
@@ -157,8 +164,8 @@ SELECT MAX(snapshot_date) FROM stock;  -- 2026-09-21 (= ημερομηνία α�
 python scripts/run_agent.py
 ```
 
-**Output** (συνθετικά δεδομένα): «Total proposals: 108 · Materials covered: 50
-· Expedite alerts: 4» και ο πίνακας `proposals` στη βάση.
+**Output** (συνθετικά δεδομένα): «Total proposals: 67 · Materials covered: 47
+· Expedite alerts: 1 · Total value: €284,854» και ο πίνακας `proposals` στη βάση.
 
 ### 3.4 Backtest
 
@@ -168,10 +175,14 @@ python scripts/run_validation.py --all-scenarios
 python scripts/run_validation.py --sensitivity
 ```
 
-**Τιμές αναφοράς** (συνθετικά δεδομένα, realistic, παράθυρο 60 ημερών, κόστη
-για το παράθυρο): TCO As-Is €180.271 → To-Be €145.108 (−19,5 %)· επίπεδο
-εξυπηρέτησης 98,9 % → 99,7 %· ημέρες έλλειψης 97 → 29· μέση αξία αποθέματος
-−17,7 %· κόστος παραγγελιών +€7.300. Ετήσιο ισοδύναμο εξοικονόμησης ≈ €214 χιλ.
+**Τιμές αναφοράς** (συνθετικά δεδομένα, realistic, παράθυρο 60 ημερών
+24.07–21.09.2026, κόστη για το παράθυρο): TCO As-Is €37.398 → To-Be €32.587
+(−12,9 %, −€4.811)· holding −9,5 %· κόστος ελλείψεων −72 %· κόστος
+παραγγελιών −1 % (102 → 101 παραγγελίες)· cycle service level 99,0 % →
+99,7 %· fill rate 100 % → 99,95 %· ημέρες έλλειψης 90 → 27· μέση αξία
+αποθέματος €900 χιλ. → €815 χιλ. Σενάρια: conservative −10,0 %, realistic
+−12,9 %, aggressive −16,0 %. Ευαισθησία: −6,6 % έως −19,3 % (όλες θετικές).
+ABC: A −18,1 %, B −8,7 %, C −6,7 %.
 
 **Output**: `validation_report.csv`, `validation_report_abc.csv`,
 `validation_report_all_scenarios.csv`, `validation_report_sensitivity.csv`
@@ -179,13 +190,15 @@ python scripts/run_validation.py --sensitivity
 ### 3.5 Τυχαία παράθυρα + Bootstrap
 
 ```bash
-python scripts/run_bootstrap.py --n-samples 30 --seed 42
+python scripts/run_bootstrap.py --n-samples 30 --window-size 60 --seed 42   # ~5 λεπτά
 ```
 
-**Τιμές αναφοράς** (συνθετικά δεδομένα): μέση εξοικονόμηση €3.073 ανά
-παράθυρο 21 ημερών· 95 % CI του μέσου (bootstrap, B = 2.000) [€2.148, €3.997]·
-t-CI [€2.084, €4.062]· 28/30 παράθυρα θετικά· p < 0,001 (bootstrap, t-test,
-sign test) → στατιστικά σημαντικό.
+**Τιμές αναφοράς** (συνθετικά δεδομένα): μέση εξοικονόμηση €3.724 ανά
+παράθυρο 60 ημερών (διάμεσος €3.432, SD €972)· 95 % CI του μέσου (bootstrap,
+B = 2.000) [€3.382, €4.077]· t-CI [€3.361, €4.086]· 30/30 παράθυρα θετικά·
+t = 20,99· p < 0,001 (bootstrap), p < 0,0001 (t-test, sign test) →
+στατιστικά σημαντικό. Το παράθυρο είναι 60 ημέρες (όχι 21) ώστε να περιέχει
+και τις παραδόσεις των παραγγελιών του πράκτορα (μέγιστο lead time 55 ημ.).
 
 **Output**: `bootstrap_report.csv` (ανά παράθυρο), `bootstrap_report_summary.csv`
 
@@ -197,6 +210,26 @@ python scripts/run_rule_ablation.py --window-days 60 --stress-test
 
 **Output**: `ablation_report.csv` — μεταβολή κάθε KPI όταν αφαιρείται ένας
 κανόνας. Με τα ίδια δεδομένα οι αριθμοί είναι ντετερμινιστικοί.
+
+**Τιμές αναφοράς** (stress test, baseline TCO €169.575, service 83,2 %):
+αφαίρεση R-SAFETY-BUFFER-A → TCO −€3.629· R-LONG-LEAD-BUFFER → −€1.085·
+R-DEAD-STOCK → −€908· R-MOQ-ENFORCE → −€365· R-CALENDAR-SHIFT → −€29·
+R-EXPEDITE / R-COST-ESTIMATE → 0 (ενημερωτικοί). Οι buffer κανόνες κοστίζουν
+στη ντετερμινιστική προσομοίωση — βλ. ΔΕ §4.7.2.
+
+### 3.6α Αξιολόγηση Πρόβλεψης (walk-forward)
+
+```bash
+python scripts/run_forecast_eval.py
+```
+
+**Τιμές αναφοράς** (128 υλικά με επαρκές ιστορικό, εβδομαδιαίο WMAPE):
+μέσος WMAPE simple average 66,6 % · moving average 68,4 % · exponential
+smoothing 67,0 % (διάμεσοι 57,2 / 57,5 / 54,5 %)· βέλτιστη μέθοδος ανά
+υλικό: SA 67, MA 26, ES 35. Με `run_validation.py --forecast-method X`:
+MA −12,9 %, SA −13,3 %, ES +1,6 %, auto −11,1 % (ΔΕ §4.9).
+
+**Output**: `forecast_report.csv`, `forecast_report_summary.csv`
 
 ### 3.7 Dashboard
 
@@ -226,7 +259,7 @@ pytest --cov=src --cov-report=html
 # Open: htmlcov/index.html
 ```
 
-**Αναμενόμενο**: 183 passed, 0 failed, 0 errors.
+**Αναμενόμενο**: 203 passed, 0 failed, 0 errors (κάλυψη `src/` ≈ 65 %).
 
 ---
 
@@ -291,9 +324,10 @@ tools** είναι αναπαράξιμες (επιστρέφουν πάντα �
 | Backtest single scenario (60 ημ.) | ~10 sec |
 | Backtest all scenarios (×3) | ~30 sec |
 | Sensitivity analysis (×9) | ~1,5 min |
-| Bootstrap (30 × 21 ημ.) | ~1,5 min |
+| Bootstrap (30 × 60 ημ.) | ~5 min |
+| Forecast evaluation (150 υλικά × 3 μέθοδοι) | ~1 min |
 | Rule ablation (×8 backtests) | ~1 min |
-| Test suite (192 tests) | ~15 sec |
+| Test suite (203 tests) | ~20 sec |
 | Streamlit dashboard load | ~3 sec |
 
 Με 1.500+ υλικά οι χρόνοι κλιμακώνονται περίπου γραμμικά (×10).
@@ -315,6 +349,8 @@ replenishment-agent/
 ├── bootstrap_report.csv                # Ανά παράθυρο (Πίν. Γ.1, Σχ. 4.2)
 ├── bootstrap_report_summary.csv        # Συγκεντρωτικά (Πίν. 4.9)
 ├── ablation_report.csv                 # Rule ablation (Πίν. 4.10)
+├── forecast_report.csv                 # WMAPE ανά υλικό/μέθοδο
+├── forecast_report_summary.csv         # Πρόβλεψη (Πίν. 4.12–4.13)
 └── logs/agent_YYYYMMDD.log             # Ημερολόγιο εκτέλεσης
 ```
 

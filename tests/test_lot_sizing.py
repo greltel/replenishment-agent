@@ -135,3 +135,41 @@ class TestApplyLotSizing:
 
     def test_zero_demand_returns_zero(self):
         assert apply_lot_sizing(net_req=0, policy="LFL") == 0
+
+
+class TestPolicySelection:
+    """ABC × CV automatic policy choice (thesis Table 4.3)."""
+
+    def test_table_4_3_mapping(self):
+        from src.mrp.lot_sizing import select_policy
+        assert select_policy("A", 0.3) == "WW"
+        assert select_policy("A", 0.5) == "POQ"
+        assert select_policy("A", 1.0) == "POQ"
+        assert select_policy("A", 1.4) == "LFL"
+        assert select_policy("B", 0.2) == "EOQ"
+        assert select_policy("B", 2.0) == "EOQ"
+        assert select_policy("C", 0.1) == "FOQ"
+        assert select_policy("C", 3.0) == "FOQ"
+
+    def test_sparse_history_falls_back_to_lfl(self):
+        from src.mrp.lot_sizing import select_policy
+        assert select_policy("A", 0.2, n_events=2) == "LFL"
+        assert select_policy("C", 0.2, n_events=0) == "LFL"
+        assert select_policy("A", None) == "LFL"
+
+    def test_enrichment_keeps_explicit_sap_procedure(self):
+        from src.data_layer.master_data_enrichment import MaterialStats, derive_lot_sizing
+        s = MaterialStats(material_id="M", n_consumption_events=50, cv_weekly=0.2)
+        assert derive_lot_sizing("POQ", s, "A") == ("POQ", "MARC.DISLS")
+        # the LFL placeholder is overridden by the ABC × CV choice
+        policy, source = derive_lot_sizing("LFL", s, "A")
+        assert policy == "WW" and source.startswith("derived")
+        assert derive_lot_sizing(None, s, "C")[0] == "FOQ"
+
+    def test_fixed_lot_for_foq_is_moq_multiple(self):
+        from src.data_layer.master_data_enrichment import MaterialStats, derive_fixed_lot_size
+        s = MaterialStats(material_id="M", avg_daily_demand=3.0)
+        lot, src = derive_fixed_lot_size(0, s, moq=10.0, policy="FOQ")
+        assert lot == 90.0 and lot % 10 == 0          # 4 weeks × 3/day = 84 → 90
+        assert derive_fixed_lot_size(0, s, moq=10.0, policy="EOQ")[0] == 0.0
+        assert derive_fixed_lot_size(120.0, s, moq=10.0, policy="FOQ") == (120.0, "MARC.BSTFE")

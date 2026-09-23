@@ -124,7 +124,8 @@ class TestLeadTimeAwareness:
         self, sample_material, constant_demand, empty_pos
     ):
         # LT = 5 days, SS = 50, demand 10/day, stock 20 → already short today
-        engine = MRPEngine(horizon_days=30)
+        # (release consolidation off: this test isolates lead-time netting)
+        engine = MRPEngine(horizon_days=30, release_bucket_days=1)
         today = date(2026, 3, 2)
         df = engine.calculate(
             material=sample_material, current_stock=20,
@@ -182,3 +183,30 @@ class TestLeadTimeAwareness:
         )
         assert df.iloc[0]["scheduled_receipt"] == 500.0
         assert df["planned_receipt"].sum() == 0
+
+
+class TestReleaseConsolidation:
+    """Planned orders released within the same review period are merged."""
+
+    def test_lot_for_lot_orders_once_per_week(self, sample_material, constant_demand, empty_pos):
+        today = date(2026, 3, 2)
+        daily = MRPEngine(horizon_days=30, release_bucket_days=1).calculate(
+            material=sample_material, current_stock=120,
+            open_orders=empty_pos, demand=constant_demand, as_of=today)
+        weekly = MRPEngine(horizon_days=30, release_bucket_days=7).calculate(
+            material=sample_material, current_stock=120,
+            open_orders=empty_pos, demand=constant_demand, as_of=today)
+        n_daily = int((daily["planned_receipt"] > 0).sum())
+        n_weekly = int((weekly["planned_receipt"] > 0).sum())
+        assert n_daily > n_weekly >= 1
+        # same total quantity, just fewer purchase orders
+        assert weekly["planned_receipt"].sum() == pytest.approx(daily["planned_receipt"].sum())
+        # releases of the merged plan are at least a week apart
+        rel = sorted(weekly.loc[weekly["planned_receipt"] > 0, "planned_release"])
+        assert all((b - a).days >= 7 for a, b in zip(rel, rel[1:]))
+        # merged material arrives earlier → projected stock never below the
+        # daily plan's, and never below safety once the first order lands
+        first_arrival = weekly.loc[weekly["planned_receipt"] > 0, "planned_arrival"].min()
+        after = weekly[weekly["period"] >= first_arrival]
+        assert (after["projected_on_hand"] >= sample_material.safety_stock - 0.01).all()
+        assert (weekly["projected_on_hand"] >= daily["projected_on_hand"] - 0.01).all()

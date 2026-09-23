@@ -200,9 +200,9 @@ def build_content(styles: dict) -> list:
         ["Επιβλέπων:",     "Σωτήρης Γκαγιαλής (ΕΜΠ Μηχανολόγων)"],
         ["Πρόγραμμα:",     "ΔΔΠΜΣ Athens MBA (ΟΠΑ + ΕΜΠ)"],
         ["GitHub:",        "github.com/greltel/replenishment-agent"],
-        ["Έκδοση Project:", "v1.0 (μετά Bootstrap CI, Rule Ablation, Forecast)"],
-        ["Tests:",         "183/183 passing"],
-        ["LOC:",           "~7,500 Python + ABAP"],
+        ["Έκδοση Project:", "v3 (Σεπτέμβριος 2026 — συγχρονισμένη με τη ΔΕ v3)"],
+        ["Tests:",         "203/203 passing"],
+        ["LOC:",           "~13.200 Python + 572 ABAP"],
     ]
     cover_table = Table(cover_table_data, colWidths=[5*cm, 9*cm])
     cover_table.setStyle(TableStyle([
@@ -318,7 +318,7 @@ def build_content(styles: dict) -> list:
 
         "<b>Testability:</b> Το data layer είναι in-memory στα tests "
         "(<font face='DejaVu-Mono'>sqlite:///:memory:</font>), επιτρέποντας "
-        "ταχύτατη εκτέλεση 183 unit tests σε ~17 δευτερόλεπτα.",
+        "ταχύτατη εκτέλεση 203 unit tests σε ~20 δευτερόλεπτα.",
     ]
     for r in arch_reasons:
         story.append(P("• " + r, styles["body"]))
@@ -336,7 +336,7 @@ def build_content(styles: dict) -> list:
         "│   └── utils/                    # KPIs, forecasting, bootstrap\n"
         "├── dashboard/                    # Streamlit (6 tabs)\n"
         "├── scripts/                      # CLI entry points\n"
-        "├── tests/                        # 183 pytest tests\n"
+        "├── tests/                        # 203 pytest tests\n"
         "├── abap/                         # SAP extractor program\n"
         "├── data/                         # raw / anonymized / samples\n"
         "└── docs/                         # Τεκμηρίωση",
@@ -431,7 +431,8 @@ def build_content(styles: dict) -> list:
         ["Safety stock",    "MARC.EISBE", "z × σ × √LT (Silver-Pyke-Peterson)"],
         ["Reorder point",   "MARC.MINBE", "avg_daily × LT + SS"],
         ["MOQ",             "MARC.BSTMI", "Median PO qty"],
-        ["Lot sizing",      "MARC.DISLS", "Από CV: WW/POQ/EOQ/FOQ"],
+        ["Lot sizing",      "MARC.DISLS", "ABC × CV (Πίν. 4.3 ΔΕ): A→WW/POQ/LFL, B→EOQ, C→FOQ"],
+        ["Fixed lot",       "MARC.BSTFE", "4 εβδομάδες ζήτησης, πολλαπλάσιο MOQ (για FOQ)"],
         ["ABC class",       "—",          "Pareto στο cost × annual_demand"],
     ]
     story.append(make_table(enrichment_table, col_widths=[3.5*cm, 4.5*cm, 7*cm]))
@@ -574,12 +575,25 @@ def build_content(styles: dict) -> list:
     lot_table = [
         ["Κωδικός", "Όνομα", "Χρήση"],
         ["LFL", "Lot-for-Lot",                "Παραγγέλνουμε ακριβώς όσο χρειάζεται. Zero holding."],
-        ["FOQ", "Fixed Order Quantity",       "Πολλαπλάσια σταθερής ποσότητας (MARC.BSTRF), τουλάχιστον MOQ."],
+        ["FOQ", "Fixed Order Quantity",       "Πολλαπλάσια σταθερής ποσότητας (MARC.BSTFE), τουλάχιστον MOQ."],
         ["EOQ", "Economic Order Quantity",    "Wilson formula. Ισορροπεί holding vs ordering cost."],
         ["POQ", "Periodic Order Quantity",    "Κάλυψη Τ* ημερών, όπου Τ* = EOQ / ημερήσια ζήτηση (7–60 ημ.)."],
         ["WW",  "Wagner-Whitin",              "Dynamic programming σε κυλιόμενο ορίζοντα· εκδίδεται η πρώτη παραγγελία της βέλτιστης λύσης."],
     ]
     story.append(make_table(lot_table, col_widths=[1.8*cm, 4*cm, 9.2*cm]))
+    story.append(P(
+        "<b>Αυτόματη επιλογή (select_policy).</b> Αν το MARC-DISLS λείπει, η πολιτική "
+        "επιλέγεται από την κλάση ABC και τον εβδομαδιαίο συντελεστή μεταβλητότητας "
+        "(CV): A-items με CV &lt; 0,5 → WW, 0,5–1,0 → POQ, &gt; 1,0 → LFL· B-items → EOQ· "
+        "C-items → FOQ (4 εβδομάδες ζήτησης, στρογγυλοποίηση σε πολλαπλάσιο MOQ). "
+        "Ο ίδιος κανόνας εφαρμόζεται και στα πραγματικά δεδομένα (master_data_enrichment) "
+        "και στη γεννήτρια συνθετικών δεδομένων.", styles["body"]
+    ))
+    story.append(P(
+        "<b>Ενοποίηση εκδόσεων.</b> Planned orders με ημερομηνία έκδοσης εντός 7 ημερών "
+        "ενοποιούνται σε μία πρόταση (release_bucket_days = 7), ώστε ένα LFL υλικό με "
+        "καθημερινή ζήτηση να μη δίνει μία παραγγελία την ημέρα.", styles["body"]
+    ))
 
     story.append(P("4.3 Wagner-Whitin Algorithm", styles["h2"]))
     story.append(P(
@@ -624,8 +638,8 @@ def build_content(styles: dict) -> list:
         ["R-DEAD-STOCK",       "1",  "Καταπνίγει προτάσεις για dead-stock υλικά (>365 ημ. χωρίς κίνηση)"],
         ["R-EXPEDITE",         "10", "Επισημαίνει urgent αν stock < 50% του safety stock"],
         ["R-SAFETY-BUFFER-A",  "20", "Προσθέτει 20% buffer στις A-class προτάσεις"],
-        ["R-LONG-LEAD-BUFFER", "25", "Επιπλέον +1 ημέρα stock cover αν LT > 30 ημ."],
-        ["R-MOQ-ENFORCE",      "30", "Στρογγυλοποίηση στο MOQ ή round-up σε fixed_lot_size"],
+        ["R-LONG-LEAD-BUFFER", "25", "+15 % στην ποσότητα αν lead time > 30 ημ."],
+        ["R-MOQ-ENFORCE",      "30", "≥ MOQ· πολλαπλάσιο fixed_lot_size (συσκευασία)· ακέραιες μονάδες για διακριτές UoM"],
         ["R-CALENDAR-SHIFT",   "80", "Μετακίνηση proposals σε εργάσιμες ημέρες"],
         ["R-COST-ESTIMATE",    "90", "Υπολογισμός estimated_cost = qty × standard_cost"],
     ]
@@ -758,7 +772,7 @@ def build_content(styles: dict) -> list:
     story.append(P("7.1 Το Πρόβλημα", styles["h2"]))
     story.append(P(
         "Όταν τρέχουμε ένα single backtest σε ένα παράθυρο 60 ημερών και "
-        "βρίσκουμε «savings = €66K», αυτή είναι μία point estimate. "
+        "βρίσκουμε «savings = €4,8K», αυτή είναι μία point estimate. "
         "Η κρίσιμη ερώτηση: πόσο εμπιστευόμαστε αυτό το νούμερο; "
         "Είναι αντιπροσωπευτικό; Μήπως είναι «τυχερό» παράθυρο;", styles["body"]
     ))
@@ -771,7 +785,9 @@ def build_content(styles: dict) -> list:
     ))
     bootstrap_outputs = [
         "<b>Στάδιο 1 — τυχαία παράθυρα (block subsampling):</b> N = 30 παράθυρα "
-        "των 21 ημερών (seed 42) → δείγμα εξοικονομήσεων s₁…s₃₀",
+        "των 60 ημερών (seed 42) → δείγμα εξοικονομήσεων s₁…s₃₀. Το μήκος είναι "
+        "τουλάχιστον ίσο με τον μεγαλύτερο χρόνο παράδοσης, ώστε κάθε παράθυρο να "
+        "περιέχει και τις παραδόσεις των παραγγελιών του πράκτορα",
         "<b>Στάδιο 2 — bootstrap του μέσου:</b> B = 2.000 επαναδειγματοληψίες με "
         "επανάθεση → 95% percentile CI του <i>μέσου</i> και bootstrap p-value "
         "(ποσοστό επαναδειγματοληψιών με μέσο ≤ 0)",
@@ -791,7 +807,7 @@ def build_content(styles: dict) -> list:
         "    samples = []\n"
         "    for i in 1..N:\n"
         "        w_start, w_end = random_window(\n"
-        "            history_start, history_end, window_size=21)\n"
+        "            history_start, history_end, window_size=60)\n"
         "        asis_tco, tobe_tco = run_backtest(w_start, w_end)\n"
         "        samples.append(asis_tco - tobe_tco)\n"
         "\n"
@@ -811,7 +827,7 @@ def build_content(styles: dict) -> list:
 
     story.append(P("7.4 Εκτέλεση", styles["h2"]))
     story.append(code_block(
-        "python scripts/run_bootstrap.py                       # 30 samples\n"
+        "python scripts/run_bootstrap.py                       # 30 x 60 ημέρες (~5 λεπτά)\n"
         "python scripts/run_bootstrap.py --n-samples 100       # Στενότερα CIs\n"
         "python scripts/run_bootstrap.py --scenario aggressive\n"
         "python scripts/run_bootstrap.py --seed 42             # reproducibility",
@@ -824,14 +840,14 @@ def build_content(styles: dict) -> list:
         "  BOOTSTRAP CONFIDENCE INTERVALS\n"
         "══════════════════════════════════════════════\n"
         "\n"
-        "  Stage 1 - windows:   30 random windows x 21 days\n"
+        "  Stage 1 - windows:   30 random windows x 60 days\n"
         "  Stage 2 - resamples: B = 2,000 (bootstrap of the mean)\n"
-        "  Mean savings / window:               +EUR 3,073\n"
-        "  Std deviation / std error of mean:   EUR 2,649 / EUR 484\n"
-        "  95% CI of mean (bootstrap, B=2000):  [+EUR 2,148, +EUR 3,997]\n"
-        "  95% CI of mean (t, df=29):           [+EUR 2,084, +EUR 4,062]\n"
+        "  Mean savings / window:               +EUR 3,724\n"
+        "  Std deviation / std error of mean:   EUR 972 / EUR 177\n"
+        "  95% CI of mean (bootstrap, B=2000):  [+EUR 3,382, +EUR 4,077]\n"
+        "  95% CI of mean (t, df=29):           [+EUR 3,361, +EUR 4,086]\n"
         "  p-value bootstrap / t-test / sign:   0.0005 / <0.0001 / <0.0001\n"
-        "  Windows positive:                    28 / 30\n"
+        "  Windows positive:                    30 / 30\n"
         "  Significant?      [YES] (CI of the mean excludes 0, p < 0.05)\n"
         "  (synthetic data, seed 42 - real data gives different figures)",
         styles["code"]
@@ -843,7 +859,7 @@ def build_content(styles: dict) -> list:
         "είναι τυχαίο;»</i>, η απάντηση είναι:", styles["body"]
     ))
     story.append(P(
-        "<i>«Τρέξαμε 30 backtest σε τυχαία επιλεγμένα παράθυρα 21 ημερών από όλο "
+        "<i>«Τρέξαμε 30 backtest σε τυχαία επιλεγμένα παράθυρα 60 ημερών από όλο "
         "το ιστορικό και εφαρμόσαμε bootstrap του μέσου με 2.000 επαναδειγματοληψίες. "
         "Το 95% διάστημα εμπιστοσύνης της μέσης εξοικονόμησης δεν περιλαμβάνει το "
         "μηδέν, ο t-test και ο έλεγχος προσήμου συμφωνούν (p &lt; 0,001) και η "
@@ -919,13 +935,13 @@ def build_content(styles: dict) -> list:
     story.append(P("8.4 Παράδειγμα Αποτελεσμάτων (Stress Mode)", styles["h2"]))
     abl_results = [
         ["Configuration", "Δ Service", "Δ TCO (€)"],
-        ["BASELINE (all rules)",         "0.00 pp",   "0"],
-        ["without R-SAFETY-BUFFER-A",    "0.00 pp",   "−69,782"],
-        ["without R-LONG-LEAD-BUFFER",   "0.00 pp",   "−40,507"],
-        ["without R-CALENDAR-SHIFT",     "0.00 pp",   "+3,335"],
+        ["BASELINE (all rules)",         "0.00 pp",   "0  (TCO €169.575, service 83,2 %)"],
+        ["without R-SAFETY-BUFFER-A",    "0.00 pp",   "−3,629"],
+        ["without R-LONG-LEAD-BUFFER",   "0.00 pp",   "−1,085"],
+        ["without R-DEAD-STOCK",         "0.00 pp",   "−908"],
+        ["without R-MOQ-ENFORCE",        "0.00 pp",   "−365"],
+        ["without R-CALENDAR-SHIFT",     "0.00 pp",   "−29"],
         ["without R-EXPEDITE",           "0.00 pp",   "0"],
-        ["without R-DEAD-STOCK",         "0.00 pp",   "0"],
-        ["without R-MOQ-ENFORCE",        "0.00 pp",   "0"],
         ["without R-COST-ESTIMATE",      "0.00 pp",   "0"],
     ]
     story.append(make_table(abl_results, col_widths=[6*cm, 3*cm, 5*cm]))
@@ -937,17 +953,20 @@ def build_content(styles: dict) -> list:
     ))
     interp_list = [
         "<b>R-SAFETY-BUFFER-A και R-LONG-LEAD-BUFFER</b> είναι κανόνες "
-        "<i>conservative</i>: αυξάνουν το TCO κατά €110K επειδή κρατούν "
-        "παραπάνω stock. Αν τους αφαιρέσεις, εξοικονομείς, αλλά αυξάνεις "
-        "το ρίσκο stockout (το οποίο δεν φάνηκε σε αυτό το window, αλλά "
-        "θα φαινόταν σε μεγαλύτερα).",
+        "<i>conservative</i>: αυξάνουν το TCO κατά ~€4,7K (2,8 % του stress "
+        "baseline) επειδή κρατούν παραπάνω stock. Αν τους αφαιρέσεις, "
+        "εξοικονομείς, αλλά αυξάνεις το ρίσκο stockout — στην προσομοίωση τα "
+        "lead times είναι ντετερμινιστικά, οπότε η «ασφάλιση» δεν πληρώνει ποτέ.",
+
+        "<b>R-DEAD-STOCK και R-MOQ-ENFORCE</b> ενεργοποιούνται στο αυτοκινητιστικό "
+        "dataset (8 % αδρανείς κωδικοί, συσκευασίες) με μικρό κόστος "
+        "(−€908 / −€365 αν αφαιρεθούν).",
 
         "<b>R-CALENDAR-SHIFT</b> μετακινεί προτάσεις σε εργάσιμες ημέρες — "
-        "μικρή θετική επίδραση στο TCO.",
+        "πρακτικά ουδέτερο (−€29).",
 
-        "<b>R-EXPEDITE, R-DEAD-STOCK, R-MOQ-ENFORCE, R-COST-ESTIMATE</b> είναι "
-        "<i>conditional rules</i>: δεν ενεργοποιούνται πάντα. Στο τρέχον "
-        "window δεν είχαν trigger, οπότε η αφαίρεσή τους δεν έχει επίδραση.",
+        "<b>R-EXPEDITE και R-COST-ESTIMATE</b> είναι <i>ενημερωτικοί</i>: δεν "
+        "αλλάζουν ποσότητες ή ημερομηνίες, οπότε η αφαίρεσή τους δεν έχει επίδραση.",
     ]
     for i in interp_list:
         story.append(P("• " + i, styles["body"]))
@@ -1017,8 +1036,8 @@ def build_content(styles: dict) -> list:
          "Average error, same units as data"],
         ["RMSE",  "√mean((actual − predicted)²)",
          "Penalizes large errors more"],
-        ["MAPE",  "mean(|actual − predicted| / |actual|) × 100",
-         "Percentage error, scale-free"],
+        ["WMAPE", "Σ|actual − predicted| / Σ|actual| × 100",
+         "Σταθμισμένο ποσοστιαίο σφάλμα — ορίζεται και με μηδενικές εβδομάδες"],
         ["Bias",  "mean(predicted − actual)",
          "Positive = over-forecast"],
     ]
@@ -1026,10 +1045,15 @@ def build_content(styles: dict) -> list:
 
     story.append(P("9.4 Best Method Selection", styles["h2"]))
     story.append(P(
-        "Η καλύτερη μέθοδος ανά υλικό επιλέγεται με κριτήριο το χαμηλότερο MAPE. "
-        "Σε υλικά με υψηλό CV (variability &gt; 1.0), όλες οι μέθοδοι έχουν "
-        "δυσκολία και το MAPE είναι &gt; 50% — αυτό φαίνεται καθαρά στο dashboard "
-        "και είναι honest reporting.", styles["body"]
+        "Η καλύτερη μέθοδος ανά υλικό επιλέγεται με κριτήριο το χαμηλότερο WMAPE "
+        "σε εβδομαδιαίο επίπεδο (walk-forward, train 8 / test 2 εβδομάδες). "
+        "Στο συνθετικό dataset (128 υλικά με επαρκές ιστορικό) ο μέσος WMAPE είναι "
+        "~67–68 % για όλες τις μεθόδους (διάμεσος ~55–57 %) — τυπικό για "
+        "διακοπτόμενη ζήτηση ανταλλακτικών· το απόθεμα ασφαλείας απορροφά τη "
+        "διαφορά. Η μέθοδος <i>auto</i> (επιλογή ανά υλικό) υπάρχει ως επιλογή "
+        "(run_agent.py --method auto), αλλά default παραμένει ο κινητός μέσος: "
+        "στο κύριο backtest η auto δίνει −11,1 % έναντι −12,9 %, και σε χειμερινό "
+        "παράθυρο υπερ-προσαρμόζεται (+39 % TCO). Βλ. ΔΕ §4.9.", styles["body"]
     ))
     story.append(PageBreak())
 
@@ -1216,11 +1240,11 @@ def build_content(styles: dict) -> list:
          "A: Σκόπιμη επιλογή. Με μικρές demand histories (180-365 ημ.) τα NNs "
          "overfit. Επίσης, ένα BDI agent χρειάζεται explainable forecasts. "
          "Συγκρίνουμε 3 statistical methods με walk-forward validation και "
-         "διαλέγουμε αυτόματα τη βέλτιστη ανά υλικό. (Ενότητα 9)"),
+         "αναφέρουμε τη βέλτιστη ανά υλικό· default ο κινητός μέσος (Ενότητα 9)"),
 
         ("Q: Πώς αξιολογείτε τη forecasting accuracy;",
          "A: Walk-forward validation με 5 folds (rolling-origin). Metrics: "
-         "MAE, RMSE, MAPE, Bias. Αναφορά: Bergmeir &amp; Benítez (2012)."),
+         "MAE, RMSE, WMAPE, Bias σε εβδομαδιαίο επίπεδο. Αναφορά: Bergmeir &amp; Benítez (2012)."),
 
         ("Q: Είναι ρεαλιστικό το cost model;",
          "A: Holding rate διασπασμένο σε 5 components (capital, warehouse, "
@@ -1235,7 +1259,7 @@ def build_content(styles: dict) -> list:
 
         ("Q: Πώς αναπαράγονται τα αποτελέσματα;",
          "A: Όλο το pipeline είναι deterministic. Random seeds (default 42) "
-         "για το bootstrap. 183 unit tests διασφαλίζουν ότι αλλαγές στον "
+         "για το bootstrap. 203 unit tests διασφαλίζουν ότι αλλαγές στον "
          "κώδικα δεν αλλοιώνουν αποτελέσματα. CSV exports σε κάθε βήμα."),
 
         ("Q: Γιατί BDI architecture και όχι reinforcement learning;",
@@ -1262,7 +1286,7 @@ def build_content(styles: dict) -> list:
     # ─── FINAL PAGE ───
     story.append(P("Επίλογος", styles["h1"]))
     story.append(P(
-        "Το παρόν project περιέχει 183 unit tests, ~7,500 γραμμές κώδικα, "
+        "Το παρόν project περιέχει 203 unit tests, ~13.700 γραμμές κώδικα (Python + ABAP), "
         "και 12 διακριτές δυνατότητες που καλύπτουν όλες τις πτυχές ενός "
         "production-grade replenishment system. Από την εξαγωγή δεδομένων "
         "(ABAP) μέχρι την υπεράσπιση των αποτελεσμάτων (Bootstrap CI), "
@@ -1284,7 +1308,7 @@ def build_content(styles: dict) -> list:
         styles["subtitle"]
     ))
     story.append(P(
-        "<i>Replenishment Agent v1.0 — Athens MBA Διπλωματική Εργασία</i>",
+        "<i>Replenishment Agent v3 — Athens MBA Διπλωματική Εργασία</i>",
         styles["note"]
     ))
 
@@ -1295,7 +1319,7 @@ def callout_text_intro_bootstrap() -> str:
     return (
         "<b>Γιατί έχει σημασία:</b> Bootstrap CI είναι το #1 ερώτημα που "
         "θα κάνει η επιτροπή στην υπεράσπιση. Χωρίς αυτό, ένα νούμερο "
-        "«31% savings» είναι just a number. Με αυτό, γίνεται defensible "
+        "«12,9 % savings» είναι just a number. Με αυτό, γίνεται defensible "
         "scientific claim με στατιστική στιβαρότητα."
     )
 

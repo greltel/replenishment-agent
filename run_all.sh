@@ -11,4 +11,5 @@ python scripts/run_validation.py --all-scenarios
 python scripts/run_validation.py --sensitivity
 python scripts/run_bootstrap.py
 python scripts/run_rule_ablation.py --stress-test
+python scripts/run_forecast_eval.py
 echo "Done. Start the dashboard with: streamlit run dashboard/app.py"

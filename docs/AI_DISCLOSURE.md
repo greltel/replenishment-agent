@@ -123,7 +123,7 @@
 |---|---|---|---|
 | README.md | Claude | Initial sections | Εμπλουτισμός με project-specific σχόλια |
 | Παράρτημα Δ PDF | Claude | Πρώτο draft όλων των 12 ενοτήτων | Review, διορθώσεις, ενσωμάτωση references |
-| Unit tests (183) | Claude | Boilerplate + test cases | Έλεγχος coverage, edge cases |
+| Unit tests (203) | Claude | Boilerplate + test cases | Έλεγχος coverage, edge cases |
 | Παρόν document | Claude + Author | Template structure | Πλήρες σε όλες τις λεπτομέρειες |
 
 ---

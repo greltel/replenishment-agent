@@ -29,10 +29,18 @@ class MRPEngine:
         horizon_days: int = 60,
         ordering_cost: float = 50.0,
         holding_rate: float = 0.20,
+        release_bucket_days: int = 7,
     ):
         self.horizon = horizon_days
         self.ordering_cost = ordering_cost
         self.holding_rate = holding_rate
+        # Planned orders whose release dates fall within the same planning
+        # period (default: the 7-day review cycle) are merged into ONE order
+        # released on the earliest date. Daily buckets would otherwise turn
+        # lot-for-lot into "one purchase order per day", which no planner
+        # executes; this is the "period lot size" convention of a weekly MRP
+        # run. Set 1 to disable.
+        self.release_bucket_days = max(int(release_bucket_days), 1)
 
     def calculate(
         self,
@@ -180,8 +188,60 @@ class MRPEngine:
             # Carry POH forward
             poh = poh_after
 
+        if self.release_bucket_days > 1:
+            rows = self._consolidate_releases(rows, float(current_stock), safety)
+
         df = pd.DataFrame(rows)
         return df
+
+    def _consolidate_releases(self, rows: list[dict], current_stock: float,
+                              safety: float) -> list[dict]:
+        """Merge planned orders released within the same planning period.
+
+        Orders are grouped from the first order onwards: every order whose
+        release date is less than `release_bucket_days` after the group's
+        anchor joins the anchor (quantity added, anchor's release and arrival
+        kept — the merged material simply arrives with the anchor). The
+        projected on-hand balance is then recomputed with the merged
+        arrivals.
+        """
+        idx_orders = [i for i, r in enumerate(rows) if r["planned_receipt"] > 0]
+        if len(idx_orders) < 2:
+            return rows
+
+        anchor = None
+        for i in idx_orders:
+            r = rows[i]
+            if anchor is None or (r["planned_release"] - rows[anchor]["planned_release"]).days \
+                    >= self.release_bucket_days:
+                anchor = i
+                continue
+            rows[anchor]["planned_receipt"] += r["planned_receipt"]
+            r["planned_receipt"] = 0.0
+            r["planned_release"] = None
+            r["planned_arrival"] = None
+
+        # Rebuild arrivals: planned_arrival_qty carries the receipts that land
+        # on a day other than the one they were decided on (inside-lead-time
+        # orders); same-day receipts stay in planned_receipt.
+        period_index = {r["period"]: t for t, r in enumerate(rows)}
+        for r in rows:
+            r["planned_arrival_qty"] = 0.0
+        for r in rows:
+            if r["planned_receipt"] > 0 and r["planned_arrival"] is not None \
+                    and r["planned_arrival"] != r["period"]:
+                t_arr = period_index.get(r["planned_arrival"])
+                if t_arr is not None:
+                    rows[t_arr]["planned_arrival_qty"] += r["planned_receipt"]
+
+        poh = current_stock
+        for r in rows:
+            same_day = (r["planned_receipt"] if r["planned_arrival"] == r["period"] else 0.0)
+            poh = poh + r["scheduled_receipt"] + r["planned_arrival_qty"] + same_day \
+                  - r["gross_requirement"]
+            r["projected_on_hand"] = poh
+            r["below_safety"] = bool(poh < safety)
+        return rows
 
     def calculate_batch(
         self,

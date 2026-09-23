@@ -21,7 +21,8 @@ from src.config import config
 from src.data_layer.repository import Repository
 from src.mrp.engine import MRPEngine
 from src.mrp.lot_sizing import poq_period
-from src.utils.forecasting import forecast, annual_demand
+from src.utils.forecasting import (forecast, annual_demand, select_method,
+                                   consumption_to_daily_series)
 from dashboard import theme
 from dashboard.theme import fmt_int, fmt_num, fmt_eur, fmt_date, section, plotly, badge
 
@@ -39,6 +40,13 @@ def _material_choices() -> list[tuple[str, str]]:
     return list(zip(df["material_id"], df["description"]))
 
 
+METHOD_LABELS_EL = {
+    "moving_average": "κινητός μέσος 30 ημ.",
+    "simple_average": "απλός μέσος 12 μηνών",
+    "exponential_smoothing": "εκθετική εξομάλυνση α=0,3",
+}
+
+
 def _compute_mrp_for_material(material_id: str, as_of: date, horizon: int = 60,
                               method: str = "moving_average") -> tuple[pd.DataFrame, dict]:
     """Run forecast + MRP on demand for a single material (same inputs as the agent)."""
@@ -52,6 +60,8 @@ def _compute_mrp_for_material(material_id: str, as_of: date, horizon: int = 60,
     open_orders = repo.get_open_pos(material_id)
     history = repo.get_consumption_history(material_id, days=365, as_of=as_of)
 
+    if method == "auto":
+        method = select_method(consumption_to_daily_series(history, as_of=as_of))
     demand = forecast(history, horizon_days=horizon, method=method, as_of=as_of)
     annual = annual_demand(history, as_of=as_of)
 
@@ -89,6 +99,7 @@ def _compute_mrp_for_material(material_id: str, as_of: date, horizon: int = 60,
         "forecast_daily": avg_daily,
         "annual_demand": annual,
         "n_history":     len(history),
+        "method":        method,
         "last_movement": last_mv,
         "poq_days":      poq_period(annual, config.default_ordering_cost,
                                     config.default_holding_rate,
@@ -149,7 +160,7 @@ def _reasoning(master: dict, mrp_df: pd.DataFrame, proposals: pd.DataFrame) -> N
         f"- **Απόθεμα σήμερα:** {fmt_int(stock)} {master['uom'] or ''} "
         + (f"(≈ {fmt_num(cover_days, 0)} ημέρες κάλυψης)" if cover_days is not None else "(χωρίς πρόβλεψη ζήτησης)")
         + (f" · ανοιχτές παραγγελίες {fmt_int(open_qty)}" if open_qty else " · καμία ανοιχτή παραγγελία"),
-        f"- **Πρόβλεψη ζήτησης:** {fmt_num(fc, 1)} μονάδες/ημέρα (κινητός μέσος 30 ημ., "
+        f"- **Πρόβλεψη ζήτησης:** {fmt_num(fc, 1)} μονάδες/ημέρα ({METHOD_LABELS_EL.get(master.get('method'), master.get('method'))}, "
         f"{fmt_int(master['n_history'])} κινήσεις τους τελευταίους 12 μήνες"
         + (f", τελευταία {fmt_date(master['last_movement'])})" if master["last_movement"] else ")"),
         f"- **Safety stock:** {fmt_int(ss)} · **Lead time:** {lt} ημ. · **MOQ:** {fmt_int(master['moq'])}",
@@ -217,8 +228,9 @@ def render(proposals: pd.DataFrame, materials: pd.DataFrame, as_of: date) -> Non
         horizon = st.selectbox("Ορίζοντας (ημ.)", [30, 60, 90, 120], index=1, key="dd_horizon")
     with c3:
         method = st.selectbox("Μέθοδος πρόβλεψης",
-                              ["moving_average", "exponential_smoothing", "simple_average"],
-                              format_func=lambda m: {"moving_average": "Κινητός μέσος (30 ημ.)",
+                              ["moving_average", "exponential_smoothing", "simple_average", "auto"],
+                              format_func=lambda m: {"auto": "Αυτόματη (walk-forward)",
+                                                     "moving_average": "Κινητός μέσος (30 ημ.)",
                                                      "exponential_smoothing": "Εκθετική εξομάλυνση",
                                                      "simple_average": "Απλός μέσος"}[m],
                               key="dd_method")
@@ -364,7 +376,7 @@ def render(proposals: pd.DataFrame, materials: pd.DataFrame, as_of: date) -> Non
 
     # ---------- Consumption history ----------
     section("Ιστορικό κατανάλωσης (12 μήνες)",
-            "Εβδομαδιαία κατανάλωση (κινήσεις 261/201/281).")
+            "Εβδομαδιαία ζήτηση: εξαγωγές προς πελάτες (κινήσεις 601/251) και αναλώσεις (261/201/281).")
     history_df = _consumption_history_df(selected, as_of)
     if history_df.empty:
         st.info("Δεν υπάρχει ιστορικό κατανάλωσης για αυτό το υλικό.")

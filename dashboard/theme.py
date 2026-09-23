@@ -52,8 +52,8 @@ RULE_LABELS_EL = {
     "R-DEAD-STOCK":       "Νεκρό απόθεμα (καταστολή)",
     "R-EXPEDITE":         "Επείγουσα παραγγελία",
     "R-SAFETY-BUFFER-A":  "Buffer +20% (A-class)",
-    "R-LONG-LEAD-BUFFER": "Buffer +15% (LT > 14 ημ.)",
-    "R-MOQ-ENFORCE":      "Ελάχιστη ποσότητα (MOQ)",
+    "R-LONG-LEAD-BUFFER": "Buffer +15% (LT > 30 ημ.)",
+    "R-MOQ-ENFORCE":      "MOQ / συσκευασία / ακέραιες μονάδες",
     "R-CALENDAR-SHIFT":   "Μετάθεση σε εργάσιμη",
     "R-COST-ESTIMATE":    "Εκτίμηση κόστους",
 }

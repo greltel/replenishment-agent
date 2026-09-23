@@ -188,6 +188,7 @@ def simulate_tobe(
     rules_engine: RulesEngine | None = None,
     initial_stock_factor: float | None = None,
     review_interval: int = REVIEW_INTERVAL_DAYS,
+    forecast_method: str = "moving_average",
 ) -> SimulationState:
     """To-Be: the agent reviews every `review_interval` days and may issue
     orders, which arrive after the material's lead time.
@@ -243,7 +244,7 @@ def simulate_tobe(
         holding_rate=config.default_holding_rate,
     )
     rules = rules_engine if rules_engine is not None else RulesEngine()
-    agent = ReplenishmentAgent(repo, mrp, rules)
+    agent = ReplenishmentAgent(repo, mrp, rules, forecast_method=forecast_method)
 
     current = start
     days_since_review = 0
@@ -301,7 +302,15 @@ def simulate_tobe(
             agent.deliberate(as_of=current)
             state.n_proposals += len(agent.intentions)
 
+            # Firm only the proposals whose release date falls before the
+            # next review (the "opening period" of an MRP run): later
+            # planned orders are re-planned at the next review with fresher
+            # data. Placing every 60-day-horizon proposal at once would lock
+            # in stale, buffered orders and overstate the agent's inventory.
+            firm_until = current + timedelta(days=review_interval - 1)
             for intention in agent.intentions:
+                if intention.proposed_date > firm_until:
+                    continue
                 effective_lt = (
                     int(materials_by_id[intention.material_id].lead_time_days or 0)
                     * lead_time_multiplier
@@ -358,13 +367,15 @@ def run_scenario(
     scenario: CostScenario,
     lead_time_multiplier: float = 1.0,
     demand_multiplier: float = 1.0,
+    forecast_method: str = "moving_average",
 ) -> tuple[KPIReport, KPIReport]:
     """Run As-Is and To-Be for a given cost scenario, return both reports."""
     log.info(f"Running As-Is for scenario '{scenario.name}'...")
     asis = simulate_asis(repo, start, end, lead_time_multiplier, demand_multiplier)
 
     log.info(f"Running To-Be for scenario '{scenario.name}'...")
-    tobe = simulate_tobe(repo, start, end, 60, lead_time_multiplier, demand_multiplier)
+    tobe = simulate_tobe(repo, start, end, 60, lead_time_multiplier, demand_multiplier,
+                         forecast_method=forecast_method)
 
     asis_kpi = kpis_from_state(asis, materials_df, scenario, start, end)
     tobe_kpi = kpis_from_state(tobe, materials_df, scenario, start, end)
@@ -530,6 +541,9 @@ def main():
                         help="Run all 3 scenarios and produce a comparison")
     parser.add_argument("--sensitivity", action="store_true",
                         help="Run sensitivity analysis (LT, demand, holding)")
+    parser.add_argument("--forecast-method", type=str, default="moving_average",
+                        choices=["moving_average", "simple_average", "exponential_smoothing", "auto"],
+                        help="Forecasting method of the To-Be agent (default moving_average)")
     parser.add_argument("--out", type=str, default="validation_report.csv")
     args = parser.parse_args()
 
@@ -591,7 +605,8 @@ def main():
             f"obsolescence={scen.holding.obsolescence_rate:.0%}, "
             f"total={scen.holding.total_rate:.0%}"
         )
-        asis, tobe = run_scenario(repo, materials_df, start, end, scen)
+        asis, tobe = run_scenario(repo, materials_df, start, end, scen,
+                                  forecast_method=args.forecast_method)
         df = print_comparison_report(asis, tobe, args.scenario)
 
         out_path = Path(args.out)

@@ -12,10 +12,13 @@ Base = declarative_base()
 
 
 # SAP movement types (BWART) that constitute DEMAND for replenishment
-# purposes: goods issues to production orders (261), cost centres (201) and
-# projects/networks (281). Used consistently by the perception module, the
-# backtest simulators and the copilot tools. Receipts (101) are never demand.
-CONSUMPTION_MOVEMENT_TYPES: tuple[str, ...] = ("261", "201", "281")
+# purposes. For a trading company (the case company imports and distributes
+# spare parts) demand is the goods issue to customers: outbound delivery
+# (601) and sales without delivery (251). For a manufacturer it is the issue
+# to production orders (261), cost centres (201) and projects/networks (281).
+# Used consistently by the perception module, the backtest simulators, the
+# forecast tab and the copilot tools. Receipts (101) are never demand.
+CONSUMPTION_MOVEMENT_TYPES: tuple[str, ...] = ("601", "251", "261", "201", "281")
 GOODS_RECEIPT_MOVEMENT_TYPE = "101"
 
 
@@ -30,11 +33,11 @@ class Material(Base):
 
     material_id     = Column(String(20), primary_key=True)
     description     = Column(String(80))      # Material description (from MAKT.MAKTX)
-    material_type   = Column(String(10))      # ROH (raw), HALB (semi), FERT (finished)
+    material_type   = Column(String(10))      # HAWA (trading goods), ROH, HALB, FERT ...
     uom             = Column(String(5))       # KG, PCS, L, ...
     abc_class       = Column(String(1))       # A / B / C
     mrp_type        = Column(String(5))       # PD, V1, VB, ...
-    lot_sizing      = Column(String(10))      # LFL, FOQ, EOQ, POQ
+    lot_sizing      = Column(String(10))      # LFL, FOQ, EOQ, POQ, WW
     lead_time_days  = Column(Integer, default=7)
     safety_stock    = Column(Float, default=0.0)
     reorder_point   = Column(Float, default=0.0)

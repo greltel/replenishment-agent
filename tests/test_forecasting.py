@@ -162,3 +162,31 @@ class TestCompareMethods:
         empty_df = pd.DataFrame(columns=["method", "mape", "n_folds"])
         result = best_method(empty_df)
         assert result == "moving_average"
+
+
+
+class TestAutoMethodSelection:
+    def test_select_method_returns_known_method(self):
+        import numpy as np, pandas as pd
+        from src.utils.forecasting import select_method
+        idx = pd.date_range("2025-09-22", periods=365, freq="D")
+        rng = np.random.default_rng(1)
+        hist = pd.Series(rng.poisson(3.0, size=365).astype(float), index=idx)
+        assert select_method(hist) in ("simple_average", "moving_average", "exponential_smoothing")
+
+    def test_short_or_empty_history_falls_back(self):
+        import pandas as pd
+        from src.utils.forecasting import select_method
+        assert select_method(pd.Series(dtype=float)) == "moving_average"
+        idx = pd.date_range("2026-08-01", periods=30, freq="D")
+        assert select_method(pd.Series([2.0] * 30, index=idx)) == "moving_average"
+
+    def test_forecast_auto_dispatches(self):
+        from datetime import date, timedelta
+        from types import SimpleNamespace
+        from src.utils.forecasting import forecast
+        as_of = date(2026, 9, 21)
+        moves = [SimpleNamespace(posting_date=as_of - timedelta(days=k), quantity=-3.0)
+                 for k in range(0, 300, 2)]
+        fc = forecast(moves, horizon_days=10, method="auto", as_of=as_of)
+        assert len(fc) == 10 and all(v >= 0 for v in fc)
