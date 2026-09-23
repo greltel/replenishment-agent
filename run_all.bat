@@ -10,7 +10,18 @@ cd /d "%~dp0"
 if exist ".venv\Scripts\activate.bat" (
     call ".venv\Scripts\activate.bat"
 ) else (
-    echo [!] No virtual environment found - using the system Python.
+    echo [!] No virtual environment found - creating .venv and installing requirements (once, 2-5 min) ...
+    python -m venv .venv || goto :error
+    call ".venv\Scripts\activate.bat"
+    python -m pip install --upgrade pip >nul
+    pip install -r requirements.txt || goto :error
+)
+
+REM Make sure the dependencies are installed (e.g. an empty or stale .venv)
+python -c "import sqlalchemy, pandas, numpy, scipy, streamlit, plotly" >nul 2>&1
+if errorlevel 1 (
+    echo [!] Missing packages - installing requirements ...
+    pip install -r requirements.txt || goto :error
 )
 
 if /I "%1"=="--keep-data" (
