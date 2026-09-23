@@ -304,11 +304,14 @@ git rev-parse --short HEAD                   <span class="c"># → commit hash �
 <code>run_all.bat</code> να έχει 9 βήματα.</p>
 
 <h3>2.3 Περιβάλλον Python (μία φορά)</h3>
+<p>Το <code>run_all.bat</code> το κάνει μόνο του: αν δεν βρει <code>.venv</code>, το δημιουργεί και εγκαθιστά τα requirements (2–5 λεπτά, μία φορά).
+Χειροκίνητα, αν προτιμάς:</p>
 <pre>python -m venv .venv
 .venv\Scripts\activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt</pre>
-<p class="small">Αν το PowerShell αρνηθεί το activate: <code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code> και ξανά.</p>
+<p class="small">Αν το PowerShell αρνηθεί το activate: <code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code> και ξανά.
+Σύμπτωμα έλλειψης: <code>ModuleNotFoundError: No module named 'sqlalchemy'</code> → τρέξε <code>pip install -r requirements.txt</code>.</p>
 
 <h3>2.4 Πλήρης εκτέλεση με συνθετικά δεδομένα (~10–12 λεπτά)</h3>
 <pre>run_all.bat</pre>
@@ -353,6 +356,7 @@ pip install -r requirements.txt</pre>
 <thead><tr><th style="width:38%">Σύμπτωμα</th><th>Αιτία / λύση</th></tr></thead>
 <tbody>
 <tr><td><code>ModuleNotFoundError: No module named 'src'</code></td><td>Τρέξε τις εντολές από τον ριζικό φάκελο του project (εκεί που είναι το <code>requirements.txt</code>).</td></tr>
+<tr><td><code>ModuleNotFoundError: No module named 'sqlalchemy'</code> (ή pandas, streamlit)</td><td>Δεν έχουν εγκατασταθεί τα requirements στο Python που τρέχει. <code>pip install -r requirements.txt</code> (μέσα στο .venv αν υπάρχει) — ή απλώς ξανατρέξε το <code>run_all.bat</code>, που πλέον το κάνει μόνο του.</td></tr>
 <tr><td><code>no such table: materials</code></td><td>Δεν έτρεξε το ETL: <code>python scripts\run_etl.py</code>.</td></tr>
 <tr><td>Η καρτέλα As-Is vs To-Be λέει «Δεν βρέθηκε αναφορά»</td><td>Λείπει CSV· η οθόνη δείχνει την εντολή που το παράγει. Τα CSV πρέπει να είναι στον ριζικό φάκελο.</td></tr>
 <tr><td>Όλες οι προτάσεις επείγουσες / απόθεμα 0 παντού</td><td>Παλιά έκδοση κώδικα (branch main πριν το merge) ή <code>AS_OF_DATE</code> λάθος στο <code>.env</code>. Σβήσε τη γραμμή ή βάλε <code>auto</code>.</td></tr>
