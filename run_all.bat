@@ -10,7 +10,7 @@ cd /d "%~dp0"
 if exist ".venv\Scripts\activate.bat" (
     call ".venv\Scripts\activate.bat"
 ) else (
-    echo [!] No virtual environment found - creating .venv and installing requirements (once, 2-5 min) ...
+    echo [!] No virtual environment found - creating .venv and installing requirements, once, 2-5 min ...
     python -m venv .venv || goto :error
     call ".venv\Scripts\activate.bat"
     python -m pip install --upgrade pip >nul
