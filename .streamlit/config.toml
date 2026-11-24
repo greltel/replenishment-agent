@@ -1,0 +1,30 @@
+# Streamlit theme for the Replenishment Agent dashboard (presentation mode).
+# Light and dark variants: the user switches with the ⋮ menu (top right) →
+# System / Light / Dark; the choice is remembered by the browser.
+[theme]
+primaryColor = "#2a78d6"
+font = "sans serif"
+
+[theme.light]
+base = "light"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f3f2ee"
+textColor = "#0b0b0b"
+
+[theme.dark]
+base = "dark"
+backgroundColor = "#111418"
+secondaryBackgroundColor = "#1b1f26"
+textColor = "#e8e6e1"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
+runOnSave = false
+
+[client]
+# "viewer" keeps the ⋮ menu (theme switch, print) and hides developer options
+toolbarMode = "viewer"
+showErrorDetails = true
