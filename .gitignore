@@ -1,0 +1,42 @@
+# SAP raw exports — ΠΟΤΕ στο git
+data/raw/
+data/anonymized/
+data/pilot/
+
+# Runtime files
+*.db
+*.db-journal
+logs/
+validation_report*.csv
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Secrets — ΠΟΤΕ στο git
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+.streamlit/secrets.toml
+
+# Generated evaluation reports & synthetic sample data (run_all.bat recreates them)
+bootstrap_report*.csv
+ablation_report.csv
+forecast_report*.csv
+data/samples/
+
+# Rule-policy change log (written by the dashboard "Αποθήκευση" button)
+config/rules_changelog.csv
+
+# Pilot-data reports (run_all_pilot.bat recreates them)
+reports/
