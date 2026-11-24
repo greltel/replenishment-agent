@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "rules": {
+    "R-DEAD-STOCK": {
+      "enabled": true,
+      "params": {
+        "inactive_days": 365
+      }
+    },
+    "R-EXPEDITE": {
+      "enabled": true,
+      "params": {
+        "stock_vs_safety_pct": 50
+      }
+    },
+    "R-SAFETY-BUFFER-A": {
+      "enabled": true,
+      "params": {
+        "buffer_pct": 20
+      }
+    },
+    "R-LONG-LEAD-BUFFER": {
+      "enabled": true,
+      "params": {
+        "threshold_days": 30,
+        "buffer_pct": 15
+      }
+    },
+    "R-MOQ-ENFORCE": {
+      "enabled": true,
+      "params": {
+        "whole_units": true
+      }
+    },
+    "R-CALENDAR-SHIFT": {
+      "enabled": true,
+      "params": {}
+    },
+    "R-COST-ESTIMATE": {
+      "enabled": true,
+      "params": {}
+    }
+  }
+}
